@@ -1,0 +1,6 @@
+{
+  "name": "NutriSaaS MVP",
+  "description": "MVP de Nutrición Integral con cálculo científico, visión por computadora para alimentos y simulación de base de datos PostgreSQL/Supabase multiusuario.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
