@@ -292,6 +292,38 @@ app.post('/api/calculate', (req, res) => {
 /**
  * MÓDULO 2: RECONOCIMIENTO VISUAL DE ALIMENTOS
  */
+// Retry wrapper for Gemini calls to survive transient 503 (High Demand) or 429 (Rate Limit) spikes
+async function generateContentWithRetry(client: GoogleGenAI, options: any, maxRetries = 3, delayMs = 1500): Promise<any> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.models.generateContent(options);
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = (err.message || "").toString().toLowerCase();
+      const errStatus = (err.status || "").toString().toLowerCase();
+      
+      const isRetryable = 
+        errStatus.includes("unavailable") || 
+        errMsg.includes("503") || 
+        errMsg.includes("temporary") ||
+        errMsg.includes("high demand") ||
+        errMsg.includes("429") || 
+        errStatus.includes("resource_exhausted") ||
+        errMsg.includes("resource exhausted");
+        
+      if (isRetryable && attempt < maxRetries) {
+        console.warn(`[Gemini API] Error transitorio detectado (${errStatus || '503'}). Reintentando en ${delayMs}ms... (Intento ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        delayMs *= 2; // exponential backoff
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 app.post('/api/analyze-food', async (req, res) => {
   const { imageBase64, mockFoodQuery, goal = "lose_weight" } = req.body;
   const client = getGeminiClient();
@@ -377,7 +409,7 @@ Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
           text: `Identifica detalladamente la comida o plato que aparece en esta imagen. Si el nombre del plato sugerido o archivo es "${mockFoodQuery || ''}", utilízalo como contexto de apoyo para mayor precisión culinaria. Estima los ingredientes componentes, sus gramos y calcula calorías y macronutrientes correspondientes, además de hasta 2 sospechas de aceites de cocina o aderezos ocultos.`
         };
 
-        response = await client.models.generateContent({
+        response = await generateContentWithRetry(client, {
           model: "gemini-2.5-flash",
           contents: {
             parts: [imagePart, textPart]
@@ -390,7 +422,7 @@ Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
         });
       } else if (mockFoodQuery) {
         console.log(`Analyzing typed food description: "${mockFoodQuery}" with Gemini...`);
-        response = await client.models.generateContent({
+        response = await generateContentWithRetry(client, {
           model: "gemini-2.5-flash",
           contents: `Analiza detalladamente este plato o comida descrita por el usuario: "${mockFoodQuery}". Identifica los ingredientes básicos que lo componen típicamente en la gastronomía (especialmente chilena si aplica), estima gramos razonables, desglosa calorías, proteínas, carbohidratos, grasas por ingrediente y sugiere hasta 2 ingredientes ocultos comunes de su preparación.`,
           config: {
