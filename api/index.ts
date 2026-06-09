@@ -1,4 +1,5 @@
 import express from 'express';
+import { GoogleGenAI } from '@google/genai';
 const app = express();
 
 app.get('/api/test', (req, res) => {
