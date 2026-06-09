@@ -52,7 +52,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       
       // Determine simulation key mapping for safety:
       let presetUserId = '';
-      if (cleanEmail === 'mari.ricardo@gmail.com') {
+      if (cleanEmail === 'ricardo.marimo@gmail.com') {
         presetUserId = 'de99bbfb-3712-40de-8e3b-9304005fc080';
       } else if (cleanEmail === 'unauthorized.attacker@evil.com') {
         presetUserId = '44444444-4444-4444-4444-444444444444';
@@ -76,20 +76,20 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
 
         localProfiles[presetUserId] = {
           email: cleanEmail,
-          first_name,
-          last_name,
-          date_of_birth: cleanEmail === 'mari.ricardo@gmail.com' ? "1994-06-07" : "1995-10-12",
-          gender: cleanEmail === 'mari.ricardo@gmail.com' ? "female" : "male",
-          height_cm: cleanEmail === 'mari.ricardo@gmail.com' ? 165 : 178,
-          weight_kg: cleanEmail === 'mari.ricardo@gmail.com' ? 68.5 : 82.0,
-          activity_level: cleanEmail === 'mari.ricardo@gmail.com' ? "moderately_active" : "lightly_active",
+          first_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
+          last_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
+          date_of_birth: cleanEmail === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12",
+          gender: cleanEmail === 'ricardo.marimo@gmail.com' ? "male" : "male",
+          height_cm: cleanEmail === 'ricardo.marimo@gmail.com' ? 178 : 175,
+          weight_kg: cleanEmail === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0,
+          activity_level: cleanEmail === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active",
           goal: "lose_weight",
-          target_calories: cleanEmail === 'mari.ricardo@gmail.com' ? 1680 : 2100,
-          target_protein_g: cleanEmail === 'mari.ricardo@gmail.com' ? 137 : 160,
-          target_carbs_g: cleanEmail === 'mari.ricardo@gmail.com' ? 140 : 210,
-          target_fat_g: cleanEmail === 'mari.ricardo@gmail.com' ? 63 : 70,
-          has_constipation_trouble: cleanEmail === 'mari.ricardo@gmail.com' ? true : false,
-          has_long_trips: cleanEmail === 'mari.ricardo@gmail.com' ? true : false,
+          target_calories: cleanEmail === 'ricardo.marimo@gmail.com' ? 2100 : 1900,
+          target_protein_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 160 : 140,
+          target_carbs_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 210 : 180,
+          target_fat_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 70 : 68,
+          has_constipation_trouble: false,
+          has_long_trips: false,
           has_other_condition: false,
           other_condition_notes: ""
         };
@@ -261,12 +261,12 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
             <div className="grid grid-cols-1 gap-2">
               <button
                 type="button"
-                onClick={() => handleQuickLogin('mari.ricardo@gmail.com')}
+                onClick={() => handleQuickLogin('ricardo.marimo@gmail.com')}
                 className="p-3 bg-[#FAF8F5] hover:bg-[#EFF4EE] border border-stone-200 hover:border-[#CDDCD0] rounded-xl text-left transition flex items-center justify-between cursor-pointer group"
               >
                 <div className="leading-tight">
-                  <span className="text-xs font-black text-stone-800 block group-hover:text-[#3D5C3A]">Ricardo Mari (Novia)</span>
-                  <span className="text-[10px] text-stone-450 font-bold block">mari.ricardo@gmail.com</span>
+                  <span className="text-xs font-black text-stone-850 block group-hover:text-[#3D5C3A]">Ricardo Marimo</span>
+                  <span className="text-[10px] text-stone-450 font-bold block">ricardo.marimo@gmail.com</span>
                 </div>
                 <UserCheck className="h-4 w-4 text-stone-400 group-hover:text-[#5A7C56] group-hover:translate-x-0.5 transition" />
               </button>
@@ -289,7 +289,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
           <div className="flex items-center gap-2 bg-[#EFF4EE]/50 border border-[#CDDCD0]/40 p-3 rounded-2xl">
             <ShieldCheck className="h-5 w-5 text-[#5A7C56] flex-shrink-0" />
             <p className="text-[10px] text-[#3D5C3A] font-bold leading-relaxed">
-              Row-Level Security Activo: Tus bitácoras de comida y fórmulas están aisladas por ID mediante políticas PostgreSQL estrictas del lado del servidor.
+              Privacidad y Durabilidad Garantizada: Tus perfiles y bitácoras se guardan en el almacenamiento local de tu navegador de forma segura. Tus consultas a la IA de Gemini son directas y confidenciales.
             </p>
           </div>
         </motion.div>

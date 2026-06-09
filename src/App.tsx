@@ -148,31 +148,6 @@ export default function App() {
     };
 
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Active');
-      }
-
-      const res = await fetch('/api/database/daily_logs/insert', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `¡Platillo del historial registrado exitosamente en tu bitácora de hoy!`
-        });
-        fetchUserData();
-        setMobileScreen('home');
-      } else {
-        throw new Error('Server insert failed');
-      }
-    } catch (err) {
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const newLog = {
@@ -184,10 +159,15 @@ export default function App() {
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       setDbStatusMsg({
         type: 'success',
-        text: `¡Platillo del historial registrado exitosamente en tu bitácora (Local)!`
+        text: `¡Platillo del historial registrado exitosamente en tu bitácora de hoy!`
       });
       fetchUserData();
       setMobileScreen('home');
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al registrar platillo del historial: ${err.message || 'Error desconocido'}`
+      });
     } finally {
       setLoading(false);
     }
@@ -227,99 +207,167 @@ export default function App() {
     setLoading(true);
     setDbStatusMsg(null);
 
-    const checkIsJson = (res: Response) => {
-      const contentType = res.headers.get('content-type');
-      return !!(contentType && contentType.includes('application/json'));
-    };
-
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Force Back');
-      }
-
-      // 1. Fetch Users List
-      const usersRes = await fetch('/api/database/users');
-      if (usersRes.ok && checkIsJson(usersRes)) {
-        const usersData = await usersRes.json();
-        setUsers(usersData);
-      } else {
-        throw new Error('Not local server - static mode');
-      }
-
-      // 2. Fetch targeted Profile
-      const profRes = await fetch('/api/database/profile', {
-        headers: { 'x-user-id': activeUserId || '' }
-      });
-      if (profRes.ok && checkIsJson(profRes)) {
-        const pData = await profRes.json();
-        setActiveProfile(pData.profile);
-        // Pre-populate calculator fields from the database profile
-        if (pData.profile) {
-          const birthDate = new Date(pData.profile.date_of_birth);
-          const ageCalculated = new Date().getFullYear() - birthDate.getFullYear();
-          setCalcForm(prev => ({
-            ...prev,
-            weight_kg: Number(pData.profile.weight_kg),
-            height_cm: Number(pData.profile.height_cm),
-            age: isNaN(ageCalculated) ? 30 : ageCalculated,
-            gender: pData.profile.gender as Gender,
-            activity_level: pData.profile.activity_level as ActivityLevel,
-            goal: pData.profile.goal as Goal,
-            has_constipation_trouble: pData.profile.has_constipation_trouble !== undefined ? !!pData.profile.has_constipation_trouble : false,
-            has_long_trips: pData.profile.has_long_trips !== undefined ? !!pData.profile.has_long_trips : false,
-            has_other_condition: pData.profile.has_other_condition !== undefined ? !!pData.profile.has_other_condition : false,
-            other_condition_notes: pData.profile.other_condition_notes || ''
-          }));
-        }
-      } else {
-        setActiveProfile(null);
-      }
-
-      // 3. Fetch Daily Logs
-      const logsRes = await fetch('/api/database/daily_logs', {
-        headers: { 'x-user-id': activeUserId || '' }
-      });
-      if (logsRes.ok && checkIsJson(logsRes)) {
-        const lData = await logsRes.json();
-        setDailyLogs(lData.logs || []);
-      }
-    } catch (e) {
-      console.log('Utilizando base de datos local (Vercel Offline/Static mode)...');
-      setIsStaticMode(true);
-
-      // 1. Emulate users
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+      
+      // If profile doesn't exist in local storage for the active user, try fetching it from the backend API first (seeding)
+      if (!localProfiles[activeUserId]) {
+        try {
+          const profRes = await fetch('/api/database/profile', {
+            headers: { 'x-user-id': activeUserId || '' }
+          });
+          if (profRes.ok) {
+            const pData = profRes.headers.get('content-type')?.includes('application/json') ? await profRes.json() : null;
+            if (pData && pData.profile) {
+              localProfiles[activeUserId] = pData.profile;
+              localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+            }
+          }
+        } catch (e) {
+          console.log('Error de red al intentar sincronizar el perfil con el servidor:', e);
+        }
+      }
+
+      // If still not present (e.g. offline and new email), seed a default one
+      if (!localProfiles[activeUserId]) {
+        const email = activeUserId.includes('@') ? activeUserId : "usuario@correo.com";
+        const emailNamePart = email.split('@')[0];
+        const parts = emailNamePart.split('.');
+        const first_name = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : "Usuario";
+        const last_name = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : "SaaS";
+
+        localProfiles[activeUserId] = {
+          email: email,
+          first_name: email === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
+          last_name: email === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
+          date_of_birth: email === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12",
+          gender: email === 'ricardo.marimo@gmail.com' ? "male" : "male",
+          height_cm: email === 'ricardo.marimo@gmail.com' ? 178 : 175,
+          weight_kg: email === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0,
+          activity_level: email === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active",
+          goal: "lose_weight",
+          target_calories: email === 'ricardo.marimo@gmail.com' ? 2100 : 1900,
+          target_protein_g: email === 'ricardo.marimo@gmail.com' ? 160 : 140,
+          target_carbs_g: email === 'ricardo.marimo@gmail.com' ? 210 : 180,
+          target_fat_g: email === 'ricardo.marimo@gmail.com' ? 70 : 68,
+          has_constipation_trouble: false,
+          has_long_trips: false,
+          has_other_condition: false,
+          other_condition_notes: ""
+        };
+        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+      }
+
+      // Load all users from localStorage to populate session switcher
       const usersList = Object.entries(localProfiles).map(([id, val]: any) => ({ id, ...val }));
       setUsers(usersList);
 
-      // 2. Emulate active profile
-      const prof = localProfiles[activeUserId];
-      if (prof) {
-        setActiveProfile(prof);
-        // Pre-populate calculator fields
-        const birthDate = new Date(prof.date_of_birth);
+      // Set active profile from localStorage
+      const activeProf = localProfiles[activeUserId];
+      setActiveProfile(activeProf);
+
+      // Pre-populate calculator fields
+      if (activeProf) {
+        const birthDate = new Date(activeProf.date_of_birth);
         const ageCalculated = new Date().getFullYear() - birthDate.getFullYear();
         setCalcForm(prev => ({
           ...prev,
-          weight_kg: Number(prof.weight_kg),
-          height_cm: Number(prof.height_cm),
+          weight_kg: Number(activeProf.weight_kg),
+          height_cm: Number(activeProf.height_cm),
           age: isNaN(ageCalculated) ? 30 : ageCalculated,
-          gender: prof.gender as Gender,
-          activity_level: prof.activity_level as ActivityLevel,
-          goal: prof.goal as Goal,
-          has_constipation_trouble: prof.has_constipation_trouble !== undefined ? !!prof.has_constipation_trouble : false,
-          has_long_trips: prof.has_long_trips !== undefined ? !!prof.has_long_trips : false,
-          has_other_condition: prof.has_other_condition !== undefined ? !!prof.has_other_condition : false,
-          other_condition_notes: prof.other_condition_notes || ''
+          gender: activeProf.gender as Gender,
+          activity_level: activeProf.activity_level as ActivityLevel,
+          goal: activeProf.goal as Goal,
+          has_constipation_trouble: activeProf.has_constipation_trouble !== undefined ? !!activeProf.has_constipation_trouble : false,
+          has_long_trips: activeProf.has_long_trips !== undefined ? !!activeProf.has_long_trips : false,
+          has_other_condition: activeProf.has_other_condition !== undefined ? !!activeProf.has_other_condition : false,
+          other_condition_notes: activeProf.other_condition_notes || ''
         }));
       }
 
-      // 3. Emulate logs
+      // 3. Load daily logs from localStorage
       const localLogsKey = 'nutrisaas_local_logs';
-      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
-      const userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
+      let localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      let userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
+
+      // If activeUserId has no logs in local storage, try fetching from the backend once (seeding)
+      if (userLogs.length === 0) {
+        try {
+          const logsRes = await fetch('/api/database/daily_logs', {
+            headers: { 'x-user-id': activeUserId || '' }
+          });
+          if (logsRes.ok) {
+            const lData = await logsRes.json();
+            if (lData.logs && lData.logs.length > 0) {
+              const existingIds = new Set(localLogs.map((l: any) => l.id));
+              const newServerLogs = lData.logs.filter((l: any) => !existingIds.has(l.id));
+              localLogs = [...newServerLogs, ...localLogs];
+              localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
+              userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
+            }
+          }
+        } catch (e) {
+          console.log('Error de red al intentar sincronizar las bitácoras con el servidor:', e);
+        }
+      }
+
+      // If still no logs, seed default ones
+      if (userLogs.length === 0) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const seeds = [
+          {
+            id: `local-log-1-${Date.now()}`,
+            user_id: activeUserId,
+            log_date: todayStr,
+            food_id: 1,
+            custom_food_name: "Palta Hass Chilena",
+            calories: 160,
+            protein_g: 2.0,
+            carbs_g: 9.0,
+            fat_g: 15.0,
+            serving_count: 1.2,
+            meal_type: "breakfast",
+            created_at: new Date().toISOString()
+          },
+          {
+            id: `local-log-2-${Date.now()}`,
+            user_id: activeUserId,
+            log_date: todayStr,
+            food_id: 2,
+            custom_food_name: "Marraqueta Chilena (Pan Batido)",
+            calories: 216,
+            protein_g: 6.8,
+            carbs_g: 44.8,
+            fat_g: 0.8,
+            serving_count: 0.8,
+            meal_type: "breakfast",
+            created_at: new Date().toISOString()
+          },
+          {
+            id: `local-log-3-${Date.now()}`,
+            user_id: activeUserId,
+            log_date: todayStr,
+            food_id: 3,
+            custom_food_name: "Lomo Liso Vacuno (Cocido)",
+            calories: 292,
+            protein_g: 42.0,
+            carbs_g: 0.0,
+            fat_g: 13.5,
+            serving_count: 1.5,
+            meal_type: "lunch",
+            created_at: new Date().toISOString()
+          }
+        ];
+        localLogs = [...localLogs, ...seeds];
+        localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
+        userLogs = seeds;
+      }
+
       setDailyLogs(userLogs);
+
+    } catch (err) {
+      console.error('Error in fetchUserData local-first:', err);
     } finally {
       setLoading(false);
     }
@@ -446,31 +494,6 @@ export default function App() {
     };
 
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Force Update Local');
-      }
-
-      const res = await fetch('/api/database/profile/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `¡Tu perfil clínico y metas nutricionales han sido actualizados con éxito!`
-        });
-        fetchUserData();
-      } else {
-        throw new Error('Profile update failed on server');
-      }
-    } catch (err: any) {
-      // Local storage profile update
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
       if (activeUserId) {
@@ -481,12 +504,14 @@ export default function App() {
         localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
         setDbStatusMsg({
           type: 'success',
-          text: `¡Tu perfil clínico y metas nutricionales han sido guardados localmente!`
+          text: `¡Tu perfil clínico y metas nutricionales han sido actualizados con éxito!`
         });
         fetchUserData();
       } else {
-        setDbStatusMsg({ type: 'error', text: `Error: ${err.message || 'ID usuario ausente'}` });
+        throw new Error('ID de usuario ausente');
       }
+    } catch (err: any) {
+      setDbStatusMsg({ type: 'error', text: `Error al actualizar perfil: ${err.message || 'Error desconocido'}` });
     } finally {
       setLoading(false);
     }
@@ -960,32 +985,6 @@ export default function App() {
     };
 
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Active');
-      }
-
-      const res = await fetch('/api/database/daily_logs/insert', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `¡Alimento analizado correctamente e integrado a tu bitácora de hoy!`
-        });
-        fetchUserData();
-        setMobileScreen('home'); // Go back to mobile dashboard
-      } else {
-        throw new Error('Server insert failed');
-      }
-    } catch (err: any) {
-      // Local storage fallback log insertion
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const newLog = {
@@ -997,10 +996,15 @@ export default function App() {
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       setDbStatusMsg({
         type: 'success',
-        text: `¡Alimento analizado correctamente e integrado a tu bitácora de hoy (Local)!`
+        text: `¡Alimento analizado correctamente e integrado a tu bitácora de hoy!`
       });
       fetchUserData();
-      setMobileScreen('home');
+      setMobileScreen('home'); // Go back to mobile dashboard
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al registrar alimento analizado: ${err.message || 'Error desconocido'}`
+      });
     } finally {
       setLoading(false);
     }
@@ -1061,34 +1065,6 @@ export default function App() {
     };
 
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Active');
-      }
-
-      const res = await fetch('/api/database/daily_logs/insert', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `¡Alimento registrado exitosamente en tu bitácora de hoy!`
-        });
-        fetchUserData();
-        setFoodSearchResults([]);
-        setBarcodeSearchQuery("");
-        setLocalFoodSearchQuery("");
-      } else {
-        throw new Error('Server manual insert failed');
-      }
-    } catch (err: any) {
-      // Local storage manual food insert
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const newLog = {
@@ -1100,12 +1076,17 @@ export default function App() {
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       setDbStatusMsg({
         type: 'success',
-        text: `¡Alimento registrado exitosamente en tu bitácora de hoy (Local)!`
+        text: `¡Alimento registrado exitosamente en tu bitácora de hoy!`
       });
       fetchUserData();
       setFoodSearchResults([]);
       setBarcodeSearchQuery("");
       setLocalFoodSearchQuery("");
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al registrar alimento manual: ${err.message || 'Error desconocido'}`
+      });
     } finally {
       setLoading(false);
     }
@@ -1114,40 +1095,20 @@ export default function App() {
   const handleDeleteDailyLog = async (logId: string | number) => {
     setLoading(true);
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Active');
-      }
-
-      const res = await fetch('/api/database/daily_logs/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify({ log_id: logId })
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `El platillo ha sido eliminado de tu registro diario.`
-        });
-        fetchUserData();
-      } else {
-        throw new Error('Delete failed on server');
-      }
-    } catch (err: any) {
-      // Local storage daily log delete
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const filtered = localLogs.filter((l: any) => l.id !== logId);
       localStorage.setItem(localLogsKey, JSON.stringify(filtered));
       setDbStatusMsg({
         type: 'success',
-        text: `El platillo ha sido eliminado de tu registro diario local.`
+        text: `El platillo ha sido eliminado de tu registro diario.`
       });
       fetchUserData();
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al eliminar el platillo: ${err.message || 'Error desconocido'}`
+      });
     } finally {
       setLoading(false);
     }
@@ -1174,31 +1135,6 @@ export default function App() {
     };
 
     try {
-      if (isStaticMode) {
-        throw new Error('Static Mode Active');
-      }
-
-      const res = await fetch('/api/database/daily_logs/insert', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': activeUserId || ''
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setDbStatusMsg({
-          type: 'success',
-          text: `¡${name} agregado con éxito a tu bitácora de hoy!`
-        });
-        fetchUserData();
-      } else {
-        throw new Error('Server insert failed');
-      }
-    } catch (err: any) {
-      // Local storage logging fallback
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const newLog = {
@@ -1210,9 +1146,14 @@ export default function App() {
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       setDbStatusMsg({
         type: 'success',
-        text: `¡${name} agregado con éxito a tu bitácora de hoy (Local)!`
+        text: `¡${name} agregado con éxito a tu bitácora de hoy!`
       });
       fetchUserData();
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al registrar alimento rápido: ${err.message || 'Error desconocido'}`
+      });
     } finally {
       setLoading(false);
     }
