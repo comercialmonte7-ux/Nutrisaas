@@ -396,149 +396,266 @@ export default function App() {
     }
   };
 
+  const getVisualAnalysisFallback = (pName: string): VisualFoodAnalysis => {
+    const query = pName.toLowerCase().trim();
+    
+    if (query.includes("palta") || query.includes("marraqueta") || query.includes("aguacate")) {
+      return {
+        food_name: "Marraqueta con Palta Hass y Huevo",
+        estimated_weight_g: 210,
+        ingredients: [
+          { name: "Palta Hass Chilena", weight_g: 80, calories: 128, protein_g: 1.6, carbs_g: 7.2, fat_g: 12.0 },
+          { name: "Marraqueta Pan Batido", weight_g: 80, calories: 216, protein_g: 6.8, carbs_g: 44.8, fat_g: 0.8 },
+          { name: "Huevo Cocido", weight_g: 50, calories: 78, protein_g: 6.5, carbs_g: 0.5, fat_g: 5.5 }
+        ],
+        total_calories: 422,
+        total_protein_g: 14.9,
+        total_carbs_g: 52.5,
+        total_fat_g: 18.3,
+        hidden_ingredients_found: [
+          { name: "Aceite de oliva rociado", extra_calories: 45, description: "Frecuentemente añadido al pan para suavizar la miga (+45 kcal)." }
+        ]
+      };
+    }
+    
+    if (query.includes("lomo") || query.includes("carne") || query.includes("vacuno") || query.includes("bife") || query.includes("asado")) {
+      return {
+        food_name: "Lomo Liso Vacuno con Tomate Limachino",
+        estimated_weight_g: 350,
+        ingredients: [
+          { name: "Lomo Liso Magro", weight_g: 200, calories: 390, protein_g: 56.0, carbs_g: 0.0, fat_g: 18.0 },
+          { name: "Tomate Limachino", weight_g: 150, calories: 27, protein_g: 1.3, carbs_g: 5.8, fat_g: 0.3 }
+        ],
+        total_calories: 417,
+        total_protein_g: 57.3,
+        total_carbs_g: 5.8,
+        total_fat_g: 18.3,
+        hidden_ingredients_found: [
+          { name: "Aceite vegetal de cocción", extra_calories: 120, description: "Añadido a la plancha para sellar la carne magra (+120 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("poroto") || query.includes("riendas") || query.includes("lentejas") || query.includes("garbanzos") || query.includes("legumbres")) {
+      return {
+        food_name: "Porotos con Riendas Tradicionales",
+        estimated_weight_g: 450,
+        ingredients: [
+          { name: "Porotos Tórtola Guisados", weight_g: 200, calories: 270, protein_g: 12.4, carbs_g: 42.0, fat_g: 6.2 },
+          { name: "Tallarines Espaguetis", weight_g: 100, calories: 135, protein_g: 5.0, carbs_g: 28.0, fat_g: 0.5 },
+          { name: "Zapallo Amarillo", weight_g: 150, calories: 45, protein_g: 1.5, carbs_g: 10.0, fat_g: 0.2 }
+        ],
+        total_calories: 450,
+        total_protein_g: 18.9,
+        total_carbs_g: 80.0,
+        total_fat_g: 6.9,
+        hidden_ingredients_found: [
+          { name: "Sofrito con manteca/aceite", extra_calories: 90, description: "Sofrito tradicional chileno para dar sabor criollo (+90 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("pollo") || query.includes("ave") || query.includes("pechuga") || query.includes("pavo")) {
+      return {
+        food_name: "Pechuga de Pollo Plancha con Arroz Blanco",
+        estimated_weight_g: 300,
+        ingredients: [
+          { name: "Pechuga de Pollo", weight_g: 150, calories: 247, protein_g: 46.5, carbs_g: 0.0, fat_g: 5.4 },
+          { name: "Arroz Blanco Cocido", weight_g: 150, calories: 195, protein_g: 4.0, carbs_g: 42.0, fat_g: 0.4 }
+        ],
+        total_calories: 442,
+        total_protein_g: 50.5,
+        total_carbs_g: 42.0,
+        total_fat_g: 5.8,
+        hidden_ingredients_found: [
+          { name: "Aceite de cocina para dorar", extra_calories: 80, description: "Añadido en la superficie para una costra crujiente (+80 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("pescado") || query.includes("salmon") || query.includes("salmón") || query.includes("reineta") || query.includes("merluza")) {
+      return {
+        food_name: "Filete de Pescado a la Plancha con Papas Cocidas",
+        estimated_weight_g: 350,
+        ingredients: [
+          { name: "Pescado Blanco (Reineta/Merluza)", weight_g: 180, calories: 180, protein_g: 36.0, carbs_g: 0.0, fat_g: 3.5 },
+          { name: "Papas Naturales Cocidas", weight_g: 170, calories: 145, protein_g: 3.4, carbs_g: 32.5, fat_g: 0.2 }
+        ],
+        total_calories: 325,
+        total_protein_g: 39.4,
+        total_carbs_g: 32.5,
+        total_fat_g: 3.7,
+        hidden_ingredients_found: [
+          { name: "Aceite/Mantequilla de ajo", extra_calories: 95, description: "Añadido comúnmente para dorar y sazonar el filete de pescado (+95 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("pasta") || query.includes("fideos") || query.includes("tallarines") || query.includes("lasaña") || query.includes("tallarín")) {
+      return {
+        food_name: "Fideos Espaguetis con Salsa Boloñesa Chilena",
+        estimated_weight_g: 380,
+        ingredients: [
+          { name: "Fideos Espaguetis", weight_g: 220, calories: 340, protein_g: 11.2, carbs_g: 68.0, fat_g: 1.2 },
+          { name: "Salsa Boloñesa de Vacuno Molido", weight_g: 160, calories: 155, protein_g: 14.5, carbs_g: 8.5, fat_g: 7.0 }
+        ],
+        total_calories: 495,
+        total_protein_g: 25.7,
+        total_carbs_g: 76.5,
+        total_fat_g: 8.2,
+        hidden_ingredients_found: [
+          { name: "Queso Parmesano espolvoreado", extra_calories: 60, description: "Una cucharada generosa de queso rallado seco (+60 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("completo") || query.includes("italiano") || query.includes("vienesa")) {
+      return {
+        food_name: "Completo Italiano Chileno Tradicional",
+        estimated_weight_g: 250,
+        ingredients: [
+          { name: "Pan de Completo", weight_g: 80, calories: 180, protein_g: 5.5, carbs_g: 36.0, fat_g: 1.5 },
+          { name: "Vienesa de Ave", weight_g: 50, calories: 120, protein_g: 6.5, carbs_g: 2.0, fat_g: 10.0 },
+          { name: "Paltas Molidas", weight_g: 60, calories: 96, protein_g: 1.0, carbs_g: 5.2, fat_g: 9.0 },
+          { name: "Picadillo de Tomate", weight_g: 40, calories: 8, protein_g: 0.4, carbs_g: 1.8, fat_g: 0.1 },
+          { name: "Mayonesa", weight_g: 20, calories: 110, protein_g: 0.2, carbs_g: 0.5, fat_g: 12.0 }
+        ],
+        total_calories: 514,
+        total_protein_g: 13.6,
+        total_carbs_g: 45.5,
+        total_fat_g: 32.6,
+        hidden_ingredients_found: [
+          { name: "Aderezo de Salsa de Tomate/Mostaza", extra_calories: 25, description: "Condimentos tradicionales para dar potencia (+25 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("empanada") || query.includes("pino")) {
+      return {
+        food_name: "Empanada de Pino de Horno Chilena",
+        estimated_weight_g: 200,
+        ingredients: [
+          { name: "Masa Horneada Chilena", weight_g: 100, calories: 240, protein_g: 6.0, carbs_g: 48.0, fat_g: 5.0 },
+          { name: "Pino de Carne de Vacuno Molido", weight_g: 80, calories: 160, protein_g: 12.0, carbs_g: 6.0, fat_g: 11.0 },
+          { name: "Huevo Duro, Aceituna y Pasas", weight_g: 20, calories: 75, protein_g: 2.0, carbs_g: 5.0, fat_g: 5.0 }
+        ],
+        total_calories: 475,
+        total_protein_g: 20.0,
+        total_carbs_g: 59.0,
+        total_fat_g: 21.0,
+        hidden_ingredients_found: [
+          { name: "Manteca en amasado de la masa", extra_calories: 80, description: "Masa tradicional con manteca de cerdo (+80 kcal)." }
+        ]
+      };
+    }
+
+    if (query.includes("cazuela")) {
+      return {
+        food_name: "Cazuela Chilena de Vacuno",
+        estimated_weight_g: 450,
+        ingredients: [
+          { name: "Osobuco de Vacuno Cocido", weight_g: 120, calories: 170, protein_g: 24.5, carbs_g: 0.0, fat_g: 8.0 },
+          { name: "Papa Cocida Entera", weight_g: 150, calories: 125, protein_g: 2.5, carbs_g: 28.5, fat_g: 0.1 },
+          { name: "Trozo de Choclo Entero", weight_g: 80, calories: 68, protein_g: 2.2, carbs_g: 15.0, fat_g: 0.8 },
+          { name: "Caldo de Cocción con Zapallo", weight_g: 100, calories: 60, protein_g: 1.5, carbs_g: 11.5, fat_g: 1.2 }
+        ],
+        total_calories: 423,
+        total_protein_g: 30.7,
+        total_carbs_g: 55.0,
+        total_fat_g: 10.1,
+        hidden_ingredients_found: [
+          { name: "Sofrito de verduras con aceite", extra_calories: 45, description: "Aromatizantes sofritos previos a caldos (+45 kcal)." }
+        ]
+      };
+    }
+
+    // Smart dynamic builder based on user typed keywords
+    const dynamicIngredients: { name: string; weight_g: number; calories: number; protein_g: number; carbs_g: number; fat_g: number; }[] = [];
+    let dynamicName = "";
+    
+    if (query.includes("arroz")) {
+      dynamicIngredients.push({ name: "Arroz Blanco Cocido", weight_g: 150, calories: 195, protein_g: 4.0, carbs_g: 42.0, fat_g: 0.4 });
+      dynamicName += "Arroz";
+    }
+    if (query.includes("huevo") || query.includes("huevos")) {
+      dynamicIngredients.push({ name: "Huevo (Preparado)", weight_g: 60, calories: 95, protein_g: 7.0, carbs_g: 0.6, fat_g: 7.2 });
+      dynamicName += (dynamicName ? " con Huevo" : "Huevo");
+    }
+    if (query.includes("pure") || query.includes("puré")) {
+      dynamicIngredients.push({ name: "Puré de papas casero", weight_g: 150, calories: 165, protein_g: 3.1, carbs_g: 29.0, fat_g: 4.8 });
+      dynamicName += (dynamicName ? " con Puré" : "Puré de papas");
+    }
+    if (query.includes("ensalada") || query.includes("tomate") || query.includes("lechuga")) {
+      dynamicIngredients.push({ name: "Ensalada Fresca Surtida", weight_g: 120, calories: 30, protein_g: 1.2, carbs_g: 6.0, fat_g: 0.2 });
+      dynamicName += (dynamicName ? " y Ensalada Surtida" : "Ensalada Fresca");
+    }
+    if (query.includes("bistec") || query.includes("carne") || query.includes("vacuno")) {
+      dynamicIngredients.push({ name: "Bistec de Vacuno Chileno", weight_g: 150, calories: 270, protein_g: 38.0, carbs_g: 0.0, fat_g: 12.5 });
+      dynamicName += (dynamicName ? " con Carne" : "Plato de Carne");
+    }
+    
+    if (dynamicIngredients.length > 0) {
+      const totalCal = dynamicIngredients.reduce((s, x) => s + x.calories, 0);
+      const totalProt = Number(dynamicIngredients.reduce((s, x) => s + x.protein_g, 0).toFixed(1));
+      const totalCarb = Number(dynamicIngredients.reduce((s, x) => s + x.carbs_g, 0).toFixed(1));
+      const totalFat = Number(dynamicIngredients.reduce((s, x) => s + x.fat_g, 0).toFixed(1));
+      const totalWeight = dynamicIngredients.reduce((s, x) => s + x.weight_g, 0);
+
+      return {
+        food_name: dynamicName.trim(),
+        estimated_weight_g: totalWeight,
+        ingredients: dynamicIngredients,
+        total_calories: totalCal,
+        total_protein_g: totalProt,
+        total_carbs_g: totalCarb,
+        total_fat_g: totalFat,
+        hidden_ingredients_found: [
+          { name: "Aceite de cocina estimado", extra_calories: 120, description: "Aceite de aderezo o preparación incorporado en cocina (+120 kcal)." }
+        ]
+      };
+    }
+
+    // Default fallback
+    const cleanedName = pName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+    const inferredFoodName = cleanedName.match(/^[a-zA-Z\s]{4,30}$/)
+      ? cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1).trim()
+      : "Plato Casero Chileno Mixto";
+
+    return {
+      food_name: inferredFoodName,
+      estimated_weight_g: 330,
+      ingredients: [
+        { name: "Proteína magra estimada", weight_g: 130, calories: 210, protein_g: 28.5, carbs_g: 0.5, fat_g: 10.2 },
+        { name: "Acompañamiento complejo", weight_g: 120, calories: 160, protein_g: 3.5, carbs_g: 34.0, fat_g: 0.6 },
+        { name: "Hortalizas de estación surtidas", weight_g: 80, calories: 32, protein_g: 1.5, carbs_g: 6.2, fat_g: 0.1 }
+      ],
+      total_calories: 402,
+      total_protein_g: 33.5,
+      total_carbs_g: 40.7,
+      total_fat_g: 10.9,
+      hidden_ingredients_found: [
+        { name: "Aceite de aderezo o preparación", extra_calories: 90, description: "Aceite vegetal o aliño incorporado en la cocina (+90 kcal)." }
+      ]
+    };
+  };
+
   const handleApplyPresetPhoto = async (presetName: string) => {
     setScanningStatus("Escaneando plato e invocando IA de Nutrición (Gemini con visión)...");
     setAiAnalysisResult(null);
 
-    const runLocalFallback = (pName: string) => {
-      const query = pName.toLowerCase();
-      let analysis: VisualFoodAnalysis;
-
-      if (query.includes("palta") || query.includes("marraqueta")) {
-        analysis = {
-          food_name: "Marraqueta con Palta Hass y Huevo",
-          estimated_weight_g: 210,
-          ingredients: [
-            { name: "Palta Hass Chilena", weight_g: 80, calories: 128, protein_g: 1.6, carbs_g: 7.2, fat_g: 12.0 },
-            { name: "Marraqueta Pan Batido", weight_g: 80, calories: 216, protein_g: 6.8, carbs_g: 44.8, fat_g: 0.8 },
-            { name: "Huevo Cocido", weight_g: 50, calories: 78, protein_g: 6.5, carbs_g: 0.5, fat_g: 5.5 }
-          ],
-          total_calories: 422,
-          total_protein_g: 14.9,
-          total_carbs_g: 52.5,
-          total_fat_g: 18.3,
-          hidden_ingredients_found: [
-            { name: "Aceite de oliva rociado", extra_calories: 45, description: "Frecuentemente añadido al pan para suavizar la miga (+45 kcal)." }
-          ]
-        };
-      } else if (query.includes("lomo") || query.includes("carne") || query.includes("vacuno") || query.includes("bife") || query.includes("asado")) {
-        analysis = {
-          food_name: "Lomo Liso Vacuno con Tomate Limachino",
-          estimated_weight_g: 350,
-          ingredients: [
-            { name: "Lomo Liso Magro", weight_g: 200, calories: 390, protein_g: 56.0, carbs_g: 0.0, fat_g: 18.0 },
-            { name: "Tomate Limachino", weight_g: 150, calories: 27, protein_g: 1.3, carbs_g: 5.8, fat_g: 0.3 }
-          ],
-          total_calories: 417,
-          total_protein_g: 57.3,
-          total_carbs_g: 5.8,
-          total_fat_g: 18.3,
-          hidden_ingredients_found: [
-            { name: "Aceite vegetal de cocción", extra_calories: 120, description: "Añadido a la plancha para sellar la carne magra (+120 kcal)." }
-          ]
-        };
-      } else if (query.includes("poroto") || query.includes("riendas")) {
-        analysis = {
-          food_name: "Porotos con Riendas Tradicionales",
-          estimated_weight_g: 450,
-          ingredients: [
-            { name: "Porotos Tórtola Guisados", weight_g: 200, calories: 270, protein_g: 12.4, carbs_g: 42.0, fat_g: 6.2 },
-            { name: "Tallarines Espaguetis", weight_g: 100, calories: 135, protein_g: 5.0, carbs_g: 28.0, fat_g: 0.5 },
-            { name: "Zapallo Amarillo", weight_g: 150, calories: 45, protein_g: 1.5, carbs_g: 10.0, fat_g: 0.2 }
-          ],
-          total_calories: 450,
-          total_protein_g: 18.9,
-          total_carbs_g: 80.0,
-          total_fat_g: 6.9,
-          hidden_ingredients_found: [
-            { name: "Sofrito con manteca/aceite", extra_calories: 90, description: "Sofrito tradicional chileno para dar sabor criollo (+90 kcal)." }
-          ]
-        };
-      } else if (query.includes("pollo") || query.includes("ave") || query.includes("pechuga")) {
-        analysis = {
-          food_name: "Pechuga de Pollo Plancha con Arroz Blanco",
-          estimated_weight_g: 300,
-          ingredients: [
-            { name: "Pechuga de Pollo", weight_g: 150, calories: 247, protein_g: 46.5, carbs_g: 0.0, fat_g: 5.4 },
-            { name: "Arroz Blanco Cocido", weight_g: 150, calories: 195, protein_g: 4.0, carbs_g: 42.0, fat_g: 0.4 }
-          ],
-          total_calories: 442,
-          total_protein_g: 50.5,
-          total_carbs_g: 42.0,
-          total_fat_g: 5.8,
-          hidden_ingredients_found: [
-            { name: "Aceite de cocina para dorar", extra_calories: 80, description: "Añadido en la superficie para una costra crujiente (+80 kcal)." }
-          ]
-        };
-      } else if (query.includes("pescado") || query.includes("salmon") || query.includes("reineta") || query.includes("merluza")) {
-        analysis = {
-          food_name: "Filete de Pescado a la Plancha con Papas Cocidas",
-          estimated_weight_g: 350,
-          ingredients: [
-            { name: "Pescado Blanco (Reineta/Merluza)", weight_g: 180, calories: 180, protein_g: 36.0, carbs_g: 0.0, fat_g: 3.5 },
-            { name: "Papas Naturales Cocidas", weight_g: 170, calories: 145, protein_g: 3.4, carbs_g: 32.5, fat_g: 0.2 }
-          ],
-          total_calories: 325,
-          total_protein_g: 39.4,
-          total_carbs_g: 32.5,
-          total_fat_g: 3.7,
-          hidden_ingredients_found: [
-            { name: "Aceite/Mantequilla de ajo", extra_calories: 95, description: "Añadido comúnmente para dorar y sazonar el filete de pescado (+95 kcal)." }
-          ]
-        };
-      } else if (query.includes("pasta") || query.includes("fideos") || query.includes("tallarines") || query.includes("lasaña")) {
-        analysis = {
-          food_name: "Fideos Espaguetis con Salsa Boloñesa Chilena",
-          estimated_weight_g: 380,
-          ingredients: [
-            { name: "Fideos Espaguetis", weight_g: 220, calories: 340, protein_g: 11.2, carbs_g: 68.0, fat_g: 1.2 },
-            { name: "Salsa Boloñesa de Vacuno Molido", weight_g: 160, calories: 155, protein_g: 14.5, carbs_g: 8.5, fat_g: 7.0 }
-          ],
-          total_calories: 495,
-          total_protein_g: 25.7,
-          total_carbs_g: 76.5,
-          total_fat_g: 8.2,
-          hidden_ingredients_found: [
-            { name: "Queso Parmesano espolvoreado", extra_calories: 60, description: "Una cucharada generosa de queso rallado seco (+60 kcal)." }
-          ]
-        };
-      } else {
-        const cleanedName = presetName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-        const inferredFoodName = cleanedName.match(/^[a-zA-Z\s]{4,30}$/)
-          ? cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1).trim()
-          : "Plato Casero Chileno Mixto";
-
-        analysis = {
-          food_name: inferredFoodName,
-          estimated_weight_g: 330,
-          ingredients: [
-            { name: "Proteína magra estimada", weight_g: 130, calories: 210, protein_g: 28.5, carbs_g: 0.5, fat_g: 10.2 },
-            { name: "Acompañamiento complejo", weight_g: 120, calories: 160, protein_g: 3.5, carbs_g: 34.0, fat_g: 0.6 },
-            { name: "Hortalizas de estación surtidas", weight_g: 80, calories: 32, protein_g: 1.5, carbs_g: 6.2, fat_g: 0.1 }
-          ],
-          total_calories: 402,
-          total_protein_g: 33.5,
-          total_carbs_g: 40.7,
-          total_fat_g: 10.9,
-          hidden_ingredients_found: [
-            { name: "Aceite de aderezo o preparación", extra_calories: 90, description: "Aceite vegetal o aliño incorporado en la cocina (+90 kcal)." }
-          ]
-        };
-      }
-
-      setAiAnalysisResult(analysis);
-      setPortionMultiplier(1.0);
-      setHiddenIngredientsForm([
-        { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
-        { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
-        { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
-      ]);
-      setScanningStatus(null);
-    };
-
     try {
       if (isStaticMode) {
-        setTimeout(() => runLocalFallback(presetName), 500);
+        setTimeout(() => {
+          const analysis = getVisualAnalysisFallback(presetName);
+          setAiAnalysisResult(analysis);
+          setPortionMultiplier(1.0);
+          setHiddenIngredientsForm([
+            { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+            { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+            { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
+          ]);
+          setScanningStatus(null);
+        }, 500);
         return;
       }
 
@@ -565,7 +682,17 @@ export default function App() {
       }
     } catch (_) {
       setScanningStatus("Usando base de datos analítica local (Modo Autónomo)...");
-      setTimeout(() => runLocalFallback(presetName), 800);
+      setTimeout(() => {
+        const analysis = getVisualAnalysisFallback(presetName);
+        setAiAnalysisResult(analysis);
+        setPortionMultiplier(1.0);
+        setHiddenIngredientsForm([
+          { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+          { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+          { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
+        ]);
+        setScanningStatus(null);
+      }, 800);
     }
   };
 
@@ -579,146 +706,20 @@ export default function App() {
       const base64String = reader.result as string;
       setCameraPhotoBase64(base64String);
 
-      const runLocalFallback = (pName: string) => {
-        const query = pName.toLowerCase();
-        let analysis: VisualFoodAnalysis;
-
-        if (query.includes("palta") || query.includes("marraqueta")) {
-          analysis = {
-            food_name: "Marraqueta con Palta Hass y Huevo",
-            estimated_weight_g: 210,
-            ingredients: [
-              { name: "Palta Hass Chilena", weight_g: 80, calories: 128, protein_g: 1.6, carbs_g: 7.2, fat_g: 12.0 },
-              { name: "Marraqueta Pan Batido", weight_g: 80, calories: 216, protein_g: 6.8, carbs_g: 44.8, fat_g: 0.8 },
-              { name: "Huevo Cocido", weight_g: 50, calories: 78, protein_g: 6.5, carbs_g: 0.5, fat_g: 5.5 }
-            ],
-            total_calories: 422,
-            total_protein_g: 14.9,
-            total_carbs_g: 52.5,
-            total_fat_g: 18.3,
-            hidden_ingredients_found: [
-              { name: "Aceite de oliva rociado", extra_calories: 45, description: "Frecuentemente añadido al pan para suavizar la miga (+45 kcal)." }
-            ]
-          };
-        } else if (query.includes("lomo") || query.includes("carne") || query.includes("vacuno") || query.includes("bife") || query.includes("asado")) {
-          analysis = {
-            food_name: "Lomo Liso Vacuno con Tomate Limachino",
-            estimated_weight_g: 350,
-            ingredients: [
-              { name: "Lomo Liso Magro", weight_g: 200, calories: 390, protein_g: 56.0, carbs_g: 0.0, fat_g: 18.0 },
-              { name: "Tomate Limachino", weight_g: 150, calories: 27, protein_g: 1.3, carbs_g: 5.8, fat_g: 0.3 }
-            ],
-            total_calories: 417,
-            total_protein_g: 57.3,
-            total_carbs_g: 5.8,
-            total_fat_g: 18.3,
-            hidden_ingredients_found: [
-              { name: "Aceite vegetal de cocción", extra_calories: 120, description: "Añadido a la plancha para sellar la carne magra (+120 kcal)." }
-            ]
-          };
-        } else if (query.includes("poroto") || query.includes("riendas")) {
-          analysis = {
-            food_name: "Porotos con Riendas Tradicionales",
-            estimated_weight_g: 450,
-            ingredients: [
-              { name: "Porotos Tórtola Guisados", weight_g: 200, calories: 270, protein_g: 12.4, carbs_g: 42.0, fat_g: 6.2 },
-              { name: "Tallarines Espaguetis", weight_g: 100, calories: 135, protein_g: 5.0, carbs_g: 28.0, fat_g: 0.5 },
-              { name: "Zapallo Amarillo", weight_g: 150, calories: 45, protein_g: 1.5, carbs_g: 10.0, fat_g: 0.2 }
-            ],
-            total_calories: 450,
-            total_protein_g: 18.9,
-            total_carbs_g: 80.0,
-            total_fat_g: 6.9,
-            hidden_ingredients_found: [
-              { name: "Sofrito con manteca/aceite", extra_calories: 90, description: "Sofrito tradicional chileno para dar sabor criollo (+90 kcal)." }
-            ]
-          };
-        } else if (query.includes("pollo") || query.includes("ave") || query.includes("pechuga")) {
-          analysis = {
-            food_name: "Pechuga de Pollo Plancha con Arroz Blanco",
-            estimated_weight_g: 300,
-            ingredients: [
-              { name: "Pechuga de Pollo", weight_g: 150, calories: 247, protein_g: 46.5, carbs_g: 0.0, fat_g: 5.4 },
-              { name: "Arroz Blanco Cocido", weight_g: 150, calories: 195, protein_g: 4.0, carbs_g: 42.0, fat_g: 0.4 }
-            ],
-            total_calories: 442,
-            total_protein_g: 50.5,
-            total_carbs_g: 42.0,
-            total_fat_g: 5.8,
-            hidden_ingredients_found: [
-              { name: "Aceite de cocina para dorar", extra_calories: 80, description: "Añadido en la superficie para una costra crujiente (+80 kcal)." }
-            ]
-          };
-        } else if (query.includes("pescado") || query.includes("salmon") || query.includes("reineta") || query.includes("merluza")) {
-          analysis = {
-            food_name: "Filete de Pescado a la Plancha con Papas Cocidas",
-            estimated_weight_g: 350,
-            ingredients: [
-              { name: "Pescado Blanco (Reineta/Merluza)", weight_g: 180, calories: 180, protein_g: 36.0, carbs_g: 0.0, fat_g: 3.5 },
-              { name: "Papas Naturales Cocidas", weight_g: 170, calories: 145, protein_g: 3.4, carbs_g: 32.5, fat_g: 0.2 }
-            ],
-            total_calories: 325,
-            total_protein_g: 39.4,
-            total_carbs_g: 32.5,
-            total_fat_g: 3.7,
-            hidden_ingredients_found: [
-              { name: "Aceite/Mantequilla de ajo", extra_calories: 95, description: "Añadido comúnmente para dorar y sazonar el filete de pescado (+95 kcal)." }
-            ]
-          };
-        } else if (query.includes("pasta") || query.includes("fideos") || query.includes("tallarines") || query.includes("lasaña")) {
-          analysis = {
-            food_name: "Fideos Espaguetis con Salsa Boloñesa Chilena",
-            estimated_weight_g: 380,
-            ingredients: [
-              { name: "Fideos Espaguetis", weight_g: 220, calories: 340, protein_g: 11.2, carbs_g: 68.0, fat_g: 1.2 },
-              { name: "Salsa Boloñesa de Vacuno Molido", weight_g: 160, calories: 155, protein_g: 14.5, carbs_g: 8.5, fat_g: 7.0 }
-            ],
-            total_calories: 495,
-            total_protein_g: 25.7,
-            total_carbs_g: 76.5,
-            total_fat_g: 8.2,
-            hidden_ingredients_found: [
-              { name: "Queso Parmesano espolvoreado", extra_calories: 60, description: "Una cucharada generosa de queso rallado seco (+60 kcal)." }
-            ]
-          };
-        } else {
-          const cleanedName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-          const inferredFoodName = cleanedName.match(/^[a-zA-Z\s]{4,30}$/)
-            ? cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1).trim()
-            : "Plato Casero Chileno Mixto";
-
-          analysis = {
-            food_name: inferredFoodName,
-            estimated_weight_g: 330,
-            ingredients: [
-              { name: "Proteína magra estimada", weight_g: 130, calories: 210, protein_g: 28.5, carbs_g: 0.5, fat_g: 10.2 },
-              { name: "Acompañamiento complejo", weight_g: 120, calories: 160, protein_g: 3.5, carbs_g: 34.0, fat_g: 0.6 },
-              { name: "Hortalizas de estación surtidas", weight_g: 80, calories: 32, protein_g: 1.5, carbs_g: 6.2, fat_g: 0.1 }
-            ],
-            total_calories: 402,
-            total_protein_g: 33.5,
-            total_carbs_g: 40.7,
-            total_fat_g: 10.9,
-            hidden_ingredients_found: [
-              { name: "Aceite de aderezo o preparación", extra_calories: 90, description: "Aceite vegetal o aliño incorporado en la cocina (+90 kcal)." }
-            ]
-          };
-        }
-
-        setAiAnalysisResult(analysis);
-        setPortionMultiplier(1.0);
-        setHiddenIngredientsForm([
-          { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
-          { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
-          { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
-        ]);
-        setScanningStatus(null);
-      };
-
       try {
         if (isStaticMode) {
           setScanningStatus("Escaneando foto procesada en base de datos local...");
-          setTimeout(() => runLocalFallback(file.name), 600);
+          setTimeout(() => {
+            const analysis = getVisualAnalysisFallback(file.name);
+            setAiAnalysisResult(analysis);
+            setPortionMultiplier(1.0);
+            setHiddenIngredientsForm([
+              { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+              { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+              { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
+            ]);
+            setScanningStatus(null);
+          }, 600);
           return;
         }
 
@@ -741,7 +742,17 @@ export default function App() {
         }
       } catch (err) {
         setScanningStatus("Usando base de datos analítica local (Modo Autónomo)...");
-        setTimeout(() => runLocalFallback(file.name), 800);
+        setTimeout(() => {
+          const analysis = getVisualAnalysisFallback(file.name);
+          setAiAnalysisResult(analysis);
+          setPortionMultiplier(1.0);
+          setHiddenIngredientsForm([
+            { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+            { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+            { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
+          ]);
+          setScanningStatus(null);
+        }, 800);
       }
     };
     reader.readAsDataURL(file);
@@ -1292,6 +1303,7 @@ export default function App() {
                 scanningStatus={scanningStatus}
                 handleApplyPresetPhoto={handleApplyPresetPhoto}
                 aiAnalysisResult={aiAnalysisResult}
+                setAiAnalysisResult={setAiAnalysisResult}
                 portionMultiplier={portionMultiplier}
                 setPortionMultiplier={setPortionMultiplier}
                 hiddenIngredientsForm={hiddenIngredientsForm}
