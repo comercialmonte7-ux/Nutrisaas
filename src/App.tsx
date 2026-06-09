@@ -1319,9 +1319,18 @@ export default function App() {
           <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-stone-100 pt-3 sm:pt-0">
             {/* Elegant User Card Profile instead of Patient badge */}
              <div className="flex items-center gap-2.5 bg-[#FAF8F5] p-1.5 pl-2 pr-3.5 rounded-2xl border border-[#CDDCD0]/80">
-              <div className="w-7 h-7 rounded-xl bg-[#5A7C56] text-white flex items-center justify-center font-black text-xs shadow-3xs uppercase">
-                {activeProfile ? `${activeProfile.first_name[0]}${activeProfile.last_name[0]}` : "RM"}
-              </div>
+              {activeProfile && activeProfile.picture ? (
+                <img 
+                  src={activeProfile.picture} 
+                  alt="Profile" 
+                  className="w-7 h-7 rounded-xl object-cover shadow-3xs border border-[#CDDCD0]/40"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-xl bg-[#5A7C56] text-white flex items-center justify-center font-black text-xs shadow-3xs uppercase">
+                  {activeProfile ? `${activeProfile.first_name[0]}${activeProfile.last_name[0]}` : "RM"}
+                </div>
+              )}
               <div className="text-left leading-none">
                 <span className="text-[9px] text-stone-400 font-extrabold block uppercase tracking-wider">Bitácora de</span>
                 <span className="text-xs font-black text-stone-850">

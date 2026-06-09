@@ -30,6 +30,7 @@ export interface UserProfile {
   has_long_trips?: boolean;
   has_other_condition?: boolean;
   other_condition_notes?: string;
+  picture?: string;
 }
 
 export interface Food {

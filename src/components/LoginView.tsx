@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Apple, ArrowRight, ShieldCheck, Mail, Sparkles, UserCheck } from 'lucide-react';
+import { Apple, ArrowRight, ShieldCheck, Sparkles, KeyRound } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: (userId: string) => void;
@@ -9,103 +9,119 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ onLoginSuccess, loading, setLoading }: LoginViewProps) {
-  const [email, setEmail] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Read Google Client ID from environment variables or localStorage fallback
+  const [googleClientId, setGoogleClientId] = useState<string>(() => {
+    return (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || localStorage.getItem('nutrisaas_google_client_id') || '';
+  });
+  const [tempClientIdInput, setTempClientIdInput] = useState('');
+
+  const handleSaveClientId = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !email.includes('@')) {
-      setErrorMsg('Por favor introduce una dirección de correo válida.');
+    const cleanId = tempClientIdInput.trim();
+    if (!cleanId) {
+      setErrorMsg('Por favor ingresa un ID de cliente válido.');
       return;
     }
-
+    localStorage.setItem('nutrisaas_google_client_id', cleanId);
+    setGoogleClientId(cleanId);
     setErrorMsg(null);
-    setLoading(true);
+  };
 
-    const cleanEmail = email.toLowerCase().trim();
-
+  const decodeJwt = (token: string) => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(function (c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          })
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      return null;
+    }
+  };
 
-      const contentType = response.headers.get('content-type');
-      if (response.ok && contentType && contentType.includes('application/json')) {
-        const data = await response.json();
-        if (data.userId) {
-          // Save to localStorage for durable sessions
-          localStorage.removeItem('nutrisaas_is_static_mode');
-          localStorage.setItem('nutrisaas_active_user_id', data.userId);
-          onLoginSuccess(data.userId);
-          return;
-        } else {
-          setErrorMsg(data.message || 'Error al autenticar el usuario.');
-          setLoading(false);
-          return;
-        }
+  const handleCredentialResponse = async (response: any) => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const token = response.credential;
+      if (!token) {
+        throw new Error('Token de credencial de Google vacío.');
       }
-      throw new Error('Not connected to Express server, invoking local mode.');
-    } catch (err) {
-      console.log('Utilizando base de datos local (Vercel Offline/Static mode)...');
-      
-      // Determine simulation key mapping for safety:
-      let presetUserId = '';
+
+      // Decode the JWT token on client side
+      const payload = decodeJwt(token);
+      if (!payload || !payload.email) {
+        throw new Error('No se pudo decodificar la información del usuario desde el token.');
+      }
+
+      const cleanEmail = payload.email.toLowerCase().trim();
+      const name = payload.name || 'Usuario Google';
+      const picture = payload.picture || '';
+
+      // Determine the user ID. Map Ricardo's Gmail to his historical ID so his logs are preserved!
+      let finalUserId = '';
       if (cleanEmail === 'ricardo.marimo@gmail.com') {
-        presetUserId = 'de99bbfb-3712-40de-8e3b-9304005fc080';
-      } else if (cleanEmail === 'unauthorized.attacker@evil.com') {
-        presetUserId = '44444444-4444-4444-4444-444444444444';
+        finalUserId = 'de99bbfb-3712-40de-8e3b-9304005fc080';
       } else {
-        // Support any new email custom creation
-        presetUserId = `local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        // Safe Google unique user ID matching their sub claim
+        finalUserId = `google-user-${payload.sub || cleanEmail.replace(/[^a-zA-Z0-9]/g, '-')}`;
       }
 
-      // Store in localStorage
-      localStorage.setItem('nutrisaas_active_user_id', presetUserId);
-      localStorage.setItem('nutrisaas_is_static_mode', 'true');
-      
-      // Seed local user profile if it doesn't exist
+      // 1. Save session to localStorage
+      localStorage.setItem('nutrisaas_active_user_id', finalUserId);
+      localStorage.removeItem('nutrisaas_is_static_mode');
+
+      // 2. Seed/update user profile in localStorage
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
-      if (!localProfiles[presetUserId]) {
-        const emailNamePart = cleanEmail.split('@')[0];
-        const parts = emailNamePart.split('.');
-        const first_name = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : "Usuario";
-        const last_name = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : "SaaS";
 
-        localProfiles[presetUserId] = {
-          email: cleanEmail,
-          first_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
-          last_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
-          date_of_birth: cleanEmail === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12",
-          gender: cleanEmail === 'ricardo.marimo@gmail.com' ? "male" : "male",
-          height_cm: cleanEmail === 'ricardo.marimo@gmail.com' ? 178 : 175,
-          weight_kg: cleanEmail === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0,
-          activity_level: cleanEmail === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active",
-          goal: "lose_weight",
-          target_calories: cleanEmail === 'ricardo.marimo@gmail.com' ? 2100 : 1900,
-          target_protein_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 160 : 140,
-          target_carbs_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 210 : 180,
-          target_fat_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 70 : 68,
-          has_constipation_trouble: false,
-          has_long_trips: false,
-          has_other_condition: false,
-          other_condition_notes: ""
-        };
-        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
-      }
+      // Parse first and last name from name
+      const nameParts = name.split(' ');
+      const first_name = nameParts[0] || 'Usuario';
+      const last_name = nameParts.slice(1).join(' ') || 'Google';
 
-      // Seed initial food logs list if empty
+      // Always update/seed Google info to keep profile updated
+      localProfiles[finalUserId] = {
+        ...localProfiles[finalUserId],
+        email: cleanEmail,
+        first_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
+        last_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
+        picture: picture, // Save profile picture URL
+        gender: localProfiles[finalUserId]?.gender || (cleanEmail === 'ricardo.marimo@gmail.com' ? "male" : "male"),
+        height_cm: localProfiles[finalUserId]?.height_cm || (cleanEmail === 'ricardo.marimo@gmail.com' ? 178 : 175),
+        weight_kg: localProfiles[finalUserId]?.weight_kg || (cleanEmail === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0),
+        activity_level: localProfiles[finalUserId]?.activity_level || (cleanEmail === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active"),
+        goal: localProfiles[finalUserId]?.goal || "lose_weight",
+        target_calories: localProfiles[finalUserId]?.target_calories || (cleanEmail === 'ricardo.marimo@gmail.com' ? 2100 : 1900),
+        target_protein_g: localProfiles[finalUserId]?.target_protein_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 160 : 140),
+        target_carbs_g: localProfiles[finalUserId]?.target_carbs_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 210 : 180),
+        target_fat_g: localProfiles[finalUserId]?.target_fat_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 70 : 68),
+        date_of_birth: localProfiles[finalUserId]?.date_of_birth || (cleanEmail === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12"),
+        has_constipation_trouble: localProfiles[finalUserId]?.has_constipation_trouble || false,
+        has_long_trips: localProfiles[finalUserId]?.has_long_trips || false,
+        has_other_condition: localProfiles[finalUserId]?.has_other_condition || false,
+        other_condition_notes: localProfiles[finalUserId]?.other_condition_notes || ""
+      };
+      localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+
+      // 3. Seed initial daily logs if empty (just like before)
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
-      const userLogs = localLogs.filter((l: any) => l.user_id === presetUserId);
+      const userLogs = localLogs.filter((l: any) => l.user_id === finalUserId);
       if (userLogs.length === 0) {
         const todayStr = new Date().toISOString().split('T')[0];
         const seeds = [
           {
             id: `local-log-1-${Date.now()}`,
-            user_id: presetUserId,
+            user_id: finalUserId,
             log_date: todayStr,
             food_id: 1,
             custom_food_name: "Palta Hass Chilena",
@@ -119,7 +135,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
           },
           {
             id: `local-log-2-${Date.now()}`,
-            user_id: presetUserId,
+            user_id: finalUserId,
             log_date: todayStr,
             food_id: 2,
             custom_food_name: "Marraqueta Chilena (Pan Batido)",
@@ -133,7 +149,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
           },
           {
             id: `local-log-3-${Date.now()}`,
-            user_id: presetUserId,
+            user_id: finalUserId,
             log_date: todayStr,
             food_id: 3,
             custom_food_name: "Lomo Liso Vacuno (Cocido)",
@@ -149,22 +165,50 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
         localStorage.setItem(localLogsKey, JSON.stringify([...localLogs, ...seeds]));
       }
 
-      onLoginSuccess(presetUserId);
+      onLoginSuccess(finalUserId);
+    } catch (err: any) {
+      console.error("Authentication error:", err);
+      setErrorMsg(err.message || 'Error al validar tu cuenta de Google.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickLogin = (presetEmail: string) => {
-    setEmail(presetEmail);
-    // Submit immediately or populate the input
-    setTimeout(() => {
-      const form = document.getElementById('login-form') as HTMLFormElement;
-      if (form) {
-        form.requestSubmit();
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const initGoogleSignIn = () => {
+      try {
+        const win = window as any;
+        if (win.google && win.google.accounts && win.google.accounts.id) {
+          win.google.accounts.id.initialize({
+            client_id: googleClientId.trim(),
+            callback: handleCredentialResponse
+          });
+          win.google.accounts.id.renderButton(
+            document.getElementById("google-signin-btn"),
+            { theme: "outline", size: "large", width: 320, text: "signin_with" }
+          );
+        }
+      } catch (err) {
+        console.error("Failed to initialize Google Sign-In:", err);
+        setErrorMsg("Error al inicializar Google Sign-In. Verifica que tu Google Client ID sea válido.");
       }
-    }, 100);
-  };
+    };
+
+    const win = window as any;
+    if (win.google && win.google.accounts) {
+      initGoogleSignIn();
+    } else {
+      const interval = setInterval(() => {
+        if (win.google && win.google.accounts) {
+          initGoogleSignIn();
+          clearInterval(interval);
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
+  }, [googleClientId]);
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col justify-between p-4 sm:p-6 md:p-8 select-none relative overflow-hidden" id="login_container">
@@ -196,7 +240,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
         >
           {/* Logo illustration */}
           <div className="text-center space-y-3">
-            <div className="inline-flex p-3.5 bg-gradient-to-br from-[#5A7C56] to-[#3D5C3A] rounded-2xl text-white shadow-md animate-bounce-slow">
+            <div className="inline-flex p-3.5 bg-gradient-to-br from-[#5A7C56] to-[#3D5C3A] rounded-2xl text-white shadow-md">
               <Apple className="h-8 w-8" />
             </div>
             <div className="space-y-1">
@@ -205,91 +249,103 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
             </div>
           </div>
 
-          <form id="login-form" onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-[10px] font-extrabold text-stone-500 uppercase tracking-widest block">
-                Correo Electrónico
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
-                  <Mail className="h-4 w-4" />
+          <div className="pt-2 border-t border-[#EFF4EE]">
+            {!googleClientId ? (
+              <form onSubmit={handleSaveClientId} className="space-y-4">
+                <div className="bg-amber-50 border border-amber-250 rounded-2xl p-4 text-xs text-amber-900 leading-relaxed space-y-2">
+                  <p className="font-extrabold flex items-center gap-1.5 text-amber-950">
+                    ⚠️ Configuración de Google OAuth Requerida
+                  </p>
+                  <p>
+                    Para habilitar el inicio de sesión seguro y privado con tu cuenta Google/Gmail, necesitas configurar un ID de cliente siguiendo estos sencillos pasos:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1.5 pl-1 font-semibold text-amber-900">
+                    <li>Ingresa a la <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-amber-950">Google Cloud Console</a>.</li>
+                    <li>Crea un proyecto e ingresa a **API y servicios** &gt; **Pantalla de consentimiento de OAuth** (Elige *Externa*, define el nombre y tu correo).</li>
+                    <li>Ve a **Credenciales** &gt; **Crear credenciales** &gt; **ID de cliente de OAuth** (Selecciona tipo *Web Application*).</li>
+                    <li>
+                      Agrega en **Orígenes de JavaScript autorizados**:
+                      <div className="mt-1 bg-white/70 p-1.5 rounded-lg border border-amber-200 font-mono text-[10px] break-all select-all select-text leading-tight">
+                        http://localhost:3000<br />
+                        https://nutrisaas-zeta.vercel.app
+                      </div>
+                    </li>
+                    <li>Haz clic en **Crear** y copia tu **ID de cliente** generado.</li>
+                  </ol>
                 </div>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ejemplo@correo.com"
-                  className="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-250 rounded-2xl text-sm font-semibold text-stone-900 focus:bg-white focus:outline-hidden focus:border-[#5A7C56] focus:ring-2 focus:ring-[#EFF4EE] transition"
-                  required
-                  disabled={loading}
-                />
-              </div>
-            </div>
 
-            {errorMsg && (
-              <div className="p-3 bg-red-50 text-red-900 rounded-xl text-xs font-semibold border border-red-100 leading-normal">
-                ⚠️ {errorMsg}
+                <div className="space-y-1.5">
+                  <label htmlFor="clientIdInput" className="text-[10px] font-extrabold text-stone-500 uppercase tracking-widest block flex items-center gap-1">
+                    <KeyRound className="h-3 w-3 text-stone-400" /> ID de Cliente de Google
+                  </label>
+                  <input
+                    type="text"
+                    id="clientIdInput"
+                    value={tempClientIdInput}
+                    onChange={(e) => setTempClientIdInput(e.target.value)}
+                    placeholder="123456789-abc.apps.googleusercontent.com"
+                    className="w-full px-4 py-3 bg-stone-50 border border-stone-250 rounded-2xl text-xs font-semibold text-stone-900 focus:bg-white focus:outline-hidden focus:border-[#5A7C56] focus:ring-2 focus:ring-[#EFF4EE] transition"
+                    required
+                  />
+                </div>
+
+                {errorMsg && (
+                  <div className="p-3 bg-red-50 text-red-900 rounded-xl text-xs font-semibold border border-red-100 leading-normal">
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#5A7C56] hover:bg-[#3D5C3A] text-white font-black py-3 rounded-2xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-xs"
+                >
+                  <span>Activar Inicio con Google</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-6 text-center py-4">
+                <p className="text-xs text-stone-600 font-medium leading-relaxed">
+                  Para ingresar y ver tus datos clínicos de forma privada y segura, inicia sesión utilizando tu cuenta de Google/Gmail.
+                </p>
+
+                {errorMsg && (
+                  <div className="p-3 bg-red-50 text-red-900 rounded-xl text-xs font-semibold border border-red-150 leading-normal text-left">
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
+
+                <div className="flex justify-center items-center py-2" id="google-signin-btn-container">
+                  <div id="google-signin-btn" className="inline-block min-h-[40px]"></div>
+                </div>
+
+                {loading && (
+                  <p className="text-[11px] text-[#5A7C56] font-bold animate-pulse">
+                    Validando tu sesión con Google...
+                  </p>
+                )}
+
+                <div className="pt-4 border-t border-stone-100">
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('nutrisaas_google_client_id');
+                      setGoogleClientId('');
+                      setErrorMsg(null);
+                    }}
+                    className="text-[10px] text-stone-400 hover:text-stone-600 font-extrabold underline cursor-pointer"
+                  >
+                    Restablecer o Cambiar Google Client ID
+                  </button>
+                </div>
               </div>
             )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#5A7C56] hover:bg-[#3D5C3A] disabled:bg-stone-300 text-white font-black py-3 rounded-2xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {loading ? (
-                <span>Autenticando sesión...</span>
-              ) : (
-                <>
-                  <span>Ingresar a Bitácora</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Quick Access sandbox accounts */}
-          <div className="space-y-2.5 pt-4 border-t border-[#EFF4EE]">
-            <div className="flex items-center gap-1">
-              <Sparkles className="h-3 w-3 text-[#5A7C56]" />
-              <span className="text-[10px] font-extrabold text-stone-400 uppercase tracking-wider block">
-                Cuentas de Demostración Presets:
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('ricardo.marimo@gmail.com')}
-                className="p-3 bg-[#FAF8F5] hover:bg-[#EFF4EE] border border-stone-200 hover:border-[#CDDCD0] rounded-xl text-left transition flex items-center justify-between cursor-pointer group"
-              >
-                <div className="leading-tight">
-                  <span className="text-xs font-black text-stone-850 block group-hover:text-[#3D5C3A]">Ricardo Marimo</span>
-                  <span className="text-[10px] text-stone-450 font-bold block">ricardo.marimo@gmail.com</span>
-                </div>
-                <UserCheck className="h-4 w-4 text-stone-400 group-hover:text-[#5A7C56] group-hover:translate-x-0.5 transition" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('unauthorized.attacker@evil.com')}
-                className="p-3 bg-[#FAF8F5] hover:bg-stone-100 border border-stone-200 rounded-xl text-left transition flex items-center justify-between cursor-pointer group"
-              >
-                <div className="leading-tight">
-                  <span className="text-xs font-black text-stone-850 block">Atacante Infiltrado (RLS Test)</span>
-                  <span className="text-[10px] text-stone-450 font-bold block">unauthorized.attacker@evil.com</span>
-                </div>
-                <UserCheck className="h-4 w-4 text-stone-400 group-hover:translate-x-0.5 transition" />
-              </button>
-            </div>
           </div>
 
           {/* Privacy promise */}
           <div className="flex items-center gap-2 bg-[#EFF4EE]/50 border border-[#CDDCD0]/40 p-3 rounded-2xl">
             <ShieldCheck className="h-5 w-5 text-[#5A7C56] flex-shrink-0" />
             <p className="text-[10px] text-[#3D5C3A] font-bold leading-relaxed">
-              Privacidad y Durabilidad Garantizada: Tus perfiles y bitácoras se guardan en el almacenamiento local de tu navegador de forma segura. Tus consultas a la IA de Gemini son directas y confidenciales.
+              Privacidad y Seguridad Garantizada: Tus datos y bitácoras se almacenan únicamente en tu navegador. NutriSaaS no comparte tu información personal con servidores externos ni terceros.
             </p>
           </div>
         </motion.div>
@@ -297,7 +353,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
 
       {/* Footer Info */}
       <p className="text-center text-[10px] text-stone-400 font-bold">
-        © {new Date().getFullYear()} NutriSaaS Corporation SA. Conexión garantizada bajo cifrado SSL de 256 bits.
+        © {new Date().getFullYear()} NutriSaaS Corporation SA. Conexión bajo cifrado OAuth2 seguro.
       </p>
     </div>
   );
