@@ -42,9 +42,7 @@ export default function App() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [dbStatusMsg, setDbStatusMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string; sql?: string } | null>(null);
-  const [isStaticMode, setIsStaticMode] = useState<boolean>(() => {
-    return localStorage.getItem('nutrisaas_is_static_mode') === 'true';
-  });
+  const [isStaticMode, setIsStaticMode] = useState<boolean>(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
 
   // Active Tab/App View inside mobile device simulation
@@ -190,7 +188,6 @@ export default function App() {
     } catch (e) {
       console.log('Utilizando base de datos local (Vercel Offline/Static mode)...');
       setIsStaticMode(true);
-      localStorage.setItem('nutrisaas_is_static_mode', 'true');
 
       // 1. Emulate users
       const localProfilesKey = 'nutrisaas_local_profiles';
