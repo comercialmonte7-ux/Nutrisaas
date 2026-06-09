@@ -22,6 +22,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { CHILEAN_RECIPES } from './recipes';
+import { CHILEAN_LA_FOODS } from './foodDatabase';
 import { Gender, ActivityLevel, Goal, MacroMethod, UserProfile, DailyLog, CalculationResult, VisualFoodAnalysis } from './types';
 
 import HomeView from './components/HomeView';
@@ -41,6 +42,9 @@ export default function App() {
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [dbStatusMsg, setDbStatusMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string; sql?: string } | null>(null);
+  const [isStaticMode, setIsStaticMode] = useState<boolean>(() => {
+    return localStorage.getItem('nutrisaas_is_static_mode') === 'true';
+  });
 
   // Active Tab/App View inside mobile device simulation
   const [mobileScreen, setMobileScreen] = useState<'home' | 'calculator' | 'scanner' | 'recipes' | 'db_explorer'>('home');
@@ -125,19 +129,31 @@ export default function App() {
     if (!activeUserId) return;
     setLoading(true);
     setDbStatusMsg(null);
+
+    const checkIsJson = (res: Response) => {
+      const contentType = res.headers.get('content-type');
+      return !!(contentType && contentType.includes('application/json'));
+    };
+
     try {
+      if (isStaticMode) {
+        throw new Error('Static Mode Force Back');
+      }
+
       // 1. Fetch Users List
       const usersRes = await fetch('/api/database/users');
-      if (usersRes.ok) {
+      if (usersRes.ok && checkIsJson(usersRes)) {
         const usersData = await usersRes.json();
         setUsers(usersData);
+      } else {
+        throw new Error('Not local server - static mode');
       }
 
       // 2. Fetch targeted Profile
       const profRes = await fetch('/api/database/profile', {
         headers: { 'x-user-id': activeUserId || '' }
       });
-      if (profRes.ok) {
+      if (profRes.ok && checkIsJson(profRes)) {
         const pData = await profRes.json();
         setActiveProfile(pData.profile);
         // Pre-populate calculator fields from the database profile
@@ -166,12 +182,48 @@ export default function App() {
       const logsRes = await fetch('/api/database/daily_logs', {
         headers: { 'x-user-id': activeUserId || '' }
       });
-      if (logsRes.ok) {
+      if (logsRes.ok && checkIsJson(logsRes)) {
         const lData = await logsRes.json();
         setDailyLogs(lData.logs || []);
       }
     } catch (e) {
-      console.error(e);
+      console.log('Utilizando base de datos local (Vercel Offline/Static mode)...');
+      setIsStaticMode(true);
+      localStorage.setItem('nutrisaas_is_static_mode', 'true');
+
+      // 1. Emulate users
+      const localProfilesKey = 'nutrisaas_local_profiles';
+      const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+      const usersList = Object.entries(localProfiles).map(([id, val]: any) => ({ id, ...val }));
+      setUsers(usersList);
+
+      // 2. Emulate active profile
+      const prof = localProfiles[activeUserId];
+      if (prof) {
+        setActiveProfile(prof);
+        // Pre-populate calculator fields
+        const birthDate = new Date(prof.date_of_birth);
+        const ageCalculated = new Date().getFullYear() - birthDate.getFullYear();
+        setCalcForm(prev => ({
+          ...prev,
+          weight_kg: Number(prof.weight_kg),
+          height_cm: Number(prof.height_cm),
+          age: isNaN(ageCalculated) ? 30 : ageCalculated,
+          gender: prof.gender as Gender,
+          activity_level: prof.activity_level as ActivityLevel,
+          goal: prof.goal as Goal,
+          has_constipation_trouble: prof.has_constipation_trouble !== undefined ? !!prof.has_constipation_trouble : false,
+          has_long_trips: prof.has_long_trips !== undefined ? !!prof.has_long_trips : false,
+          has_other_condition: prof.has_other_condition !== undefined ? !!prof.has_other_condition : false,
+          other_condition_notes: prof.other_condition_notes || ''
+        }));
+      }
+
+      // 3. Emulate logs
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
+      setDailyLogs(userLogs);
     } finally {
       setLoading(false);
     }
@@ -179,6 +231,10 @@ export default function App() {
 
   const calculateTDEELocally = async () => {
     try {
+      if (isStaticMode) {
+        throw new Error('Static mode calculations active');
+      }
+
       const res = await fetch('/api/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,31 +258,101 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setCalculatedTarget(data);
+      } else {
+        throw new Error('Calculate server failed or static');
       }
     } catch (err) {
-      console.error(err);
+      // Offline / Static Mifflin-St Jeor local formula calculation
+      const weight = calcForm.weight_kg;
+      const height = calcForm.height_cm;
+      const age = calcForm.age;
+      const gender = calcForm.gender;
+      
+      let bmr = 0;
+      if (gender === 'male') {
+        bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+      } else {
+        bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+      }
+
+      const activityMultipliers: Record<ActivityLevel, number> = {
+        sedentary: 1.2,
+        lightly_active: 1.375,
+        moderately_active: 1.55,
+        very_active: 1.725,
+        extra_active: 1.9
+      };
+
+      const multiplier = activityMultipliers[calcForm.activity_level] || 1.375;
+      let tdee = Math.round(bmr * multiplier);
+
+      if (calcForm.wearable_enabled) {
+        tdee += calcForm.activeCaloriesToday;
+      }
+
+      let targetKcal = tdee;
+      if (calcForm.goal === 'lose_weight') {
+        targetKcal = Math.round(tdee - 500);
+      } else if (calcForm.goal === 'gain_muscle') {
+        targetKcal = Math.round(tdee + 300);
+      }
+      if (targetKcal < 1200) targetKcal = 1200; // safe baseline
+
+      let protG = 135;
+      let carbsG = 140;
+      let fatG = 60;
+
+      if (calcForm.macro_method === 'weight_ratio') {
+        protG = Math.round(weight * calcForm.specific_protein_ratio);
+        fatG = Math.round(weight * calcForm.specific_fat_ratio);
+        const protKcal = protG * 4;
+        const fatKcal = fatG * 9;
+        const remainingKcal = Math.max(0, targetKcal - protKcal - fatKcal);
+        carbsG = Math.round(remainingKcal / 4);
+      } else {
+        // Balanced ratio 30/40/30
+        protG = Math.round((targetKcal * 0.3) / 4);
+        carbsG = Math.round((targetKcal * 0.4) / 4);
+        fatG = Math.round((targetKcal * 0.3) / 9);
+      }
+
+      setCalculatedTarget({
+        bmr: Math.round(bmr),
+        tdee,
+        target_calories: targetKcal,
+        target_protein_g: protG,
+        target_carbs_g: carbsG,
+        target_fat_g: fatG,
+        water_l: Number((weight * 0.035).toFixed(1)),
+        dietary_fiber_g: calcForm.has_constipation_trouble ? 35 : 25
+      });
     }
   };
 
   const handleUpdateSupabaseProfile = async () => {
     if (!calculatedTarget) return;
     setLoading(true);
+    
+    const payload = {
+      gender: calcForm.gender,
+      height_cm: calcForm.height_cm,
+      weight_kg: calcForm.weight_kg,
+      activity_level: calcForm.activity_level,
+      goal: calcForm.goal,
+      target_calories: calculatedTarget.target_calories,
+      target_protein_g: calculatedTarget.target_protein_g,
+      target_carbs_g: calculatedTarget.target_carbs_g,
+      target_fat_g: calculatedTarget.target_fat_g,
+      has_constipation_trouble: !!calcForm.has_constipation_trouble,
+      has_long_trips: !!calcForm.has_long_trips,
+      has_other_condition: !!calcForm.has_other_condition,
+      other_condition_notes: calcForm.other_condition_notes || ''
+    };
+
     try {
-      const payload = {
-        gender: calcForm.gender,
-        height_cm: calcForm.height_cm,
-        weight_kg: calcForm.weight_kg,
-        activity_level: calcForm.activity_level,
-        goal: calcForm.goal,
-        target_calories: calculatedTarget.target_calories,
-        target_protein_g: calculatedTarget.target_protein_g,
-        target_carbs_g: calculatedTarget.target_carbs_g,
-        target_fat_g: calculatedTarget.target_fat_g,
-        has_constipation_trouble: !!calcForm.has_constipation_trouble,
-        has_long_trips: !!calcForm.has_long_trips,
-        has_other_condition: !!calcForm.has_other_condition,
-        other_condition_notes: calcForm.other_condition_notes || ''
-      };
+      if (isStaticMode) {
+        throw new Error('Static Mode Force Update Local');
+      }
 
       const res = await fetch('/api/database/profile/update', {
         method: 'POST',
@@ -245,13 +371,26 @@ export default function App() {
         });
         fetchUserData();
       } else {
-        setDbStatusMsg({
-          type: 'error',
-          text: `No se pudo actualizar el perfil. Por favor, revisa tus datos.`
-        });
+        throw new Error('Profile update failed on server');
       }
     } catch (err: any) {
-      setDbStatusMsg({ type: 'error', text: `Error de red de base de datos: ${err.message}` });
+      // Local storage profile update
+      const localProfilesKey = 'nutrisaas_local_profiles';
+      const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+      if (activeUserId) {
+        localProfiles[activeUserId] = {
+          ...localProfiles[activeUserId],
+          ...payload
+        };
+        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+        setDbStatusMsg({
+          type: 'success',
+          text: `¡Tu perfil clínico y metas nutricionales han sido guardados localmente!`
+        });
+        fetchUserData();
+      } else {
+        setDbStatusMsg({ type: 'error', text: `Error: ${err.message || 'ID usuario ausente'}` });
+      }
     } finally {
       setLoading(false);
     }
@@ -338,17 +477,21 @@ export default function App() {
     const totalCarb = Number((aiAnalysisResult.total_carbs_g * mult).toFixed(1));
     const totalFat = Number((aiAnalysisResult.total_fat_g * mult + (hiddenCalories / 9)).toFixed(1));
 
+    const payload = {
+      log_date: new Date().toISOString().split('T')[0],
+      custom_food_name: `${aiAnalysisResult.food_name} (${Math.round(mult * 105)}% de porción)`,
+      calories: totalKcal,
+      protein_g: totalProt,
+      carbs_g: totalCarb,
+      fat_g: totalFat,
+      serving_count: mult,
+      meal_type: loggedMealType
+    };
+
     try {
-      const payload = {
-        log_date: new Date().toISOString().split('T')[0],
-        custom_food_name: `${aiAnalysisResult.food_name} (${Math.round(mult * 105)}% de porción)`,
-        calories: totalKcal,
-        protein_g: totalProt,
-        carbs_g: totalCarb,
-        fat_g: totalFat,
-        serving_count: mult,
-        meal_type: loggedMealType
-      };
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
 
       const res = await fetch('/api/database/daily_logs/insert', {
         method: 'POST',
@@ -368,13 +511,25 @@ export default function App() {
         fetchUserData();
         setMobileScreen('home'); // Go back to mobile dashboard
       } else {
-        setDbStatusMsg({
-          type: 'error',
-          text: `Hubo un error al registrar el alimento. Reintenta por favor.`
-        });
+        throw new Error('Server insert failed');
       }
     } catch (err: any) {
-      setDbStatusMsg({ type: 'error', text: `Error de red de base de datos: ${err.message}` });
+      // Local storage fallback log insertion
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const newLog = {
+        id: `local-log-${Date.now()}`,
+        user_id: activeUserId,
+        ...payload,
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      setDbStatusMsg({
+        type: 'success',
+        text: `¡Alimento analizado correctamente e integrado a tu bitácora de hoy (Local)!`
+      });
+      fetchUserData();
+      setMobileScreen('home');
     } finally {
       setLoading(false);
     }
@@ -393,28 +548,51 @@ export default function App() {
     }
 
     try {
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
+
       const res = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}`);
       if (res.ok) {
         const data = await res.json();
         setFoodSearchResults(data);
+      } else {
+        throw new Error('Search API failed or static');
       }
-    } catch (_) {}
+    } catch (_) {
+      // High fidelity client-side query over CHILEAN_LA_FOODS
+      const queryL = query.toLowerCase().trim();
+      if (searchType === 'barcode') {
+        const found = CHILEAN_LA_FOODS.find(f => f.barcode === queryL);
+        setFoodSearchResults(found ? [found] : []);
+      } else {
+        const found = CHILEAN_LA_FOODS.filter(f => 
+          f.name.toLowerCase().includes(queryL) || 
+          (f.brand && f.brand.toLowerCase().includes(queryL))
+        );
+        setFoodSearchResults(found);
+      }
+    }
   };
 
   const handleLogManualFood = async (food: any) => {
     setLoading(true);
+    const payload = {
+      log_date: new Date().toISOString().split('T')[0],
+      food_id: food.id,
+      custom_food_name: food.name,
+      calories: Math.round(food.calories_100g * (food.serving_size_g / 100)),
+      protein_g: Number((food.protein_100g * (food.serving_size_g / 100)).toFixed(1)),
+      carbs_g: Number((food.carbs_100g * (food.serving_size_g / 100)).toFixed(1)),
+      fat_g: Number((food.fat_100g * (food.serving_size_g / 100)).toFixed(1)),
+      serving_count: 1.0,
+      meal_type: "snack"
+    };
+
     try {
-      const payload = {
-        log_date: new Date().toISOString().split('T')[0],
-        food_id: food.id,
-        custom_food_name: food.name,
-        calories: Math.round(food.calories_100g * (food.serving_size_g / 100)),
-        protein_g: Number((food.protein_100g * (food.serving_size_g / 100)).toFixed(1)),
-        carbs_g: Number((food.carbs_100g * (food.serving_size_g / 100)).toFixed(1)),
-        fat_g: Number((food.fat_100g * (food.serving_size_g / 100)).toFixed(1)),
-        serving_count: 1.0,
-        meal_type: "snack"
-      };
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
 
       const res = await fetch('/api/database/daily_logs/insert', {
         method: 'POST',
@@ -435,9 +613,28 @@ export default function App() {
         setFoodSearchResults([]);
         setBarcodeSearchQuery("");
         setLocalFoodSearchQuery("");
+      } else {
+        throw new Error('Server manual insert failed');
       }
     } catch (err: any) {
-      console.error(err);
+      // Local storage manual food insert
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const newLog = {
+        id: `local-log-${Date.now()}`,
+        user_id: activeUserId,
+        ...payload,
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      setDbStatusMsg({
+        type: 'success',
+        text: `¡Alimento registrado exitosamente en tu bitácora de hoy (Local)!`
+      });
+      fetchUserData();
+      setFoodSearchResults([]);
+      setBarcodeSearchQuery("");
+      setLocalFoodSearchQuery("");
     } finally {
       setLoading(false);
     }
@@ -446,6 +643,10 @@ export default function App() {
   const handleDeleteDailyLog = async (logId: string | number) => {
     setLoading(true);
     try {
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
+
       const res = await fetch('/api/database/daily_logs/delete', {
         method: 'POST',
         headers: {
@@ -463,13 +664,19 @@ export default function App() {
         });
         fetchUserData();
       } else {
-        setDbStatusMsg({
-          type: 'error',
-          text: `No se pudo eliminar el registro seleccionado.`
-        });
+        throw new Error('Delete failed on server');
       }
     } catch (err: any) {
-      setDbStatusMsg({ type: 'error', text: err.message });
+      // Local storage daily log delete
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const filtered = localLogs.filter((l: any) => l.id !== logId);
+      localStorage.setItem(localLogsKey, JSON.stringify(filtered));
+      setDbStatusMsg({
+        type: 'success',
+        text: `El platillo ha sido eliminado de tu registro diario local.`
+      });
+      fetchUserData();
     } finally {
       setLoading(false);
     }
@@ -484,17 +691,21 @@ export default function App() {
     mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack'
   ) => {
     setLoading(true);
+    const payload = {
+      log_date: new Date().toISOString().split('T')[0],
+      custom_food_name: name,
+      calories: calories,
+      protein_g: protein,
+      carbs_g: carbs,
+      fat_g: fat,
+      serving_count: 1.0,
+      meal_type: mealType
+    };
+
     try {
-      const payload = {
-        log_date: new Date().toISOString().split('T')[0],
-        custom_food_name: name,
-        calories: calories,
-        protein_g: protein,
-        carbs_g: carbs,
-        fat_g: fat,
-        serving_count: 1.0,
-        meal_type: mealType
-      };
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
 
       const res = await fetch('/api/database/daily_logs/insert', {
         method: 'POST',
@@ -513,13 +724,24 @@ export default function App() {
         });
         fetchUserData();
       } else {
-        setDbStatusMsg({
-          type: 'error',
-          text: `No se pudo registrar ${name} de forma rápida.`
-        });
+        throw new Error('Server insert failed');
       }
     } catch (err: any) {
-      setDbStatusMsg({ type: 'error', text: `Error de red de base de datos: ${err.message}` });
+      // Local storage logging fallback
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const newLog = {
+        id: `local-log-${Date.now()}`,
+        user_id: activeUserId,
+        ...payload,
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      setDbStatusMsg({
+        type: 'success',
+        text: `¡${name} agregado con éxito a tu bitácora de hoy (Local)!`
+      });
+      fetchUserData();
     } finally {
       setLoading(false);
     }
@@ -534,6 +756,10 @@ export default function App() {
   const generateShoppingList = async () => {
     setLoading(true);
     try {
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
+
       const res = await fetch('/api/shopping-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -551,9 +777,46 @@ export default function App() {
           initialChecked[item.name] = false;
         });
         setShoppingCheckedItems(initialChecked);
+      } else {
+        throw new Error('Shopping list generation failed or static');
       }
     } catch (e) {
-      console.error(e);
+      // Dynamic local shopping list algorithm using imported ingredients/recipes
+      const needed: Record<string, { qty: number; unit: string }> = {};
+      selectedRecipes.forEach(recipeId => {
+        const rec = CHILEAN_RECIPES.find(r => r.id === recipeId);
+        if (rec && rec.ingredients) {
+          rec.ingredients.forEach(ing => {
+            const name = ing.name.toLowerCase();
+            const current = needed[name] || { qty: 0, unit: ing.unit };
+            needed[name] = {
+              qty: current.qty + ing.qty,
+              unit: ing.unit
+            };
+          });
+        }
+      });
+
+      const list: any[] = [];
+      Object.entries(needed).forEach(([ingName, info]) => {
+        const stock = pantryInventory[ingName] || 0;
+        const required = info.qty;
+        const shortage = Math.max(0, required - stock);
+        list.push({
+          ingredient: ingName.charAt(0).toUpperCase() + ingName.slice(1),
+          required,
+          pantry_stock: stock,
+          shortage,
+          unit: info.unit
+        });
+      });
+
+      setShoppingListResult(list);
+      const initialChecked: Record<string, boolean> = {};
+      list.forEach((item: any) => {
+        initialChecked[item.ingredient] = false;
+      });
+      setShoppingCheckedItems(initialChecked);
     } finally {
       setLoading(false);
     }
@@ -604,13 +867,18 @@ export default function App() {
               <Apple className="h-7 w-7" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center flex-wrap gap-2">
                 <h1 className="text-lg sm:text-xl font-black tracking-tight text-stone-900">
                   NutriSaaS
                 </h1>
                 <span className="text-[10px] bg-[#EFF4EE] text-[#3D5C3A] font-black px-2.5 py-0.5 rounded-full border border-[#CDDCD0]">
                   Mi Nutrición Inteligente
                 </span>
+                {isStaticMode && (
+                  <span className="text-[10px] bg-[#E8F1FC] text-blue-700 font-extrabold px-2.5 py-0.5 rounded-full border border-blue-200 animate-pulse" title="Ejecutando en Modo Sandbox Local Storage (Vercel)">
+                    Modo Local Activo
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-stone-400 font-bold">Bitácora activa y planificador de precisión saludable</p>
             </div>

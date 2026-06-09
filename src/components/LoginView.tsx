@@ -22,24 +22,134 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
     setErrorMsg(null);
     setLoading(true);
 
+    const cleanEmail = email.toLowerCase().trim();
+
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.userId) {
-        // Save to localStorage for durable sessions
-        localStorage.setItem('nutrisaas_active_user_id', data.userId);
-        onLoginSuccess(data.userId);
-      } else {
-        setErrorMsg(data.message || 'Error al autenticar el usuario.');
+      const contentType = response.headers.get('content-type');
+      if (response.ok && contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        if (data.userId) {
+          // Save to localStorage for durable sessions
+          localStorage.removeItem('nutrisaas_is_static_mode');
+          localStorage.setItem('nutrisaas_active_user_id', data.userId);
+          onLoginSuccess(data.userId);
+          return;
+        } else {
+          setErrorMsg(data.message || 'Error al autenticar el usuario.');
+          setLoading(false);
+          return;
+        }
       }
+      throw new Error('Not connected to Express server, invoking local mode.');
     } catch (err) {
-      setErrorMsg('Error de conexión con el servidor. Reintenta por favor.');
+      console.log('Utilizando base de datos local (Vercel Offline/Static mode)...');
+      
+      // Determine simulation key mapping for safety:
+      let presetUserId = '';
+      if (cleanEmail === 'mari.ricardo@gmail.com') {
+        presetUserId = 'de99bbfb-3712-40de-8e3b-9304005fc080';
+      } else if (cleanEmail === 'unauthorized.attacker@evil.com') {
+        presetUserId = '44444444-4444-4444-4444-444444444444';
+      } else {
+        // Support any new email custom creation
+        presetUserId = `local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      }
+
+      // Store in localStorage
+      localStorage.setItem('nutrisaas_active_user_id', presetUserId);
+      localStorage.setItem('nutrisaas_is_static_mode', 'true');
+      
+      // Seed local user profile if it doesn't exist
+      const localProfilesKey = 'nutrisaas_local_profiles';
+      const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+      if (!localProfiles[presetUserId]) {
+        const emailNamePart = cleanEmail.split('@')[0];
+        const parts = emailNamePart.split('.');
+        const first_name = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : "Usuario";
+        const last_name = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : "SaaS";
+
+        localProfiles[presetUserId] = {
+          email: cleanEmail,
+          first_name,
+          last_name,
+          date_of_birth: cleanEmail === 'mari.ricardo@gmail.com' ? "1994-06-07" : "1995-10-12",
+          gender: cleanEmail === 'mari.ricardo@gmail.com' ? "female" : "male",
+          height_cm: cleanEmail === 'mari.ricardo@gmail.com' ? 165 : 178,
+          weight_kg: cleanEmail === 'mari.ricardo@gmail.com' ? 68.5 : 82.0,
+          activity_level: cleanEmail === 'mari.ricardo@gmail.com' ? "moderately_active" : "lightly_active",
+          goal: "lose_weight",
+          target_calories: cleanEmail === 'mari.ricardo@gmail.com' ? 1680 : 2100,
+          target_protein_g: cleanEmail === 'mari.ricardo@gmail.com' ? 137 : 160,
+          target_carbs_g: cleanEmail === 'mari.ricardo@gmail.com' ? 140 : 210,
+          target_fat_g: cleanEmail === 'mari.ricardo@gmail.com' ? 63 : 70,
+          has_constipation_trouble: cleanEmail === 'mari.ricardo@gmail.com' ? true : false,
+          has_long_trips: cleanEmail === 'mari.ricardo@gmail.com' ? true : false,
+          has_other_condition: false,
+          other_condition_notes: ""
+        };
+        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+      }
+
+      // Seed initial food logs list if empty
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const userLogs = localLogs.filter((l: any) => l.user_id === presetUserId);
+      if (userLogs.length === 0) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const seeds = [
+          {
+            id: `local-log-1-${Date.now()}`,
+            user_id: presetUserId,
+            log_date: todayStr,
+            food_id: 1,
+            custom_food_name: "Palta Hass Chilena",
+            calories: 160,
+            protein_g: 2.0,
+            carbs_g: 9.0,
+            fat_g: 15.0,
+            serving_count: 1.2,
+            meal_type: "breakfast",
+            created_at: new Date().toISOString()
+          },
+          {
+            id: `local-log-2-${Date.now()}`,
+            user_id: presetUserId,
+            log_date: todayStr,
+            food_id: 2,
+            custom_food_name: "Marraqueta Chilena (Pan Batido)",
+            calories: 216,
+            protein_g: 6.8,
+            carbs_g: 44.8,
+            fat_g: 0.8,
+            serving_count: 0.8,
+            meal_type: "breakfast",
+            created_at: new Date().toISOString()
+          },
+          {
+            id: `local-log-3-${Date.now()}`,
+            user_id: presetUserId,
+            log_date: todayStr,
+            food_id: 3,
+            custom_food_name: "Lomo Liso Vacuno (Cocido)",
+            calories: 292,
+            protein_g: 42.0,
+            carbs_g: 0.0,
+            fat_g: 13.5,
+            serving_count: 1.5,
+            meal_type: "lunch",
+            created_at: new Date().toISOString()
+          }
+        ];
+        localStorage.setItem(localLogsKey, JSON.stringify([...localLogs, ...seeds]));
+      }
+
+      onLoginSuccess(presetUserId);
     } finally {
       setLoading(false);
     }
