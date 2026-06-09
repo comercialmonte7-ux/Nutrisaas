@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Food } from './types';
+import { Food } from './types.js';
 
 export const CHILEAN_LA_FOODS: Food[] = [
   {

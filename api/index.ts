@@ -7,9 +7,9 @@ import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { CHILEAN_LA_FOODS, searchFoods, findFoodByBarcode } from '../src/foodDatabase';
-import { CHILEAN_RECIPES } from '../src/recipes';
-import { Gender, ActivityLevel, Goal, MacroMethod, UserProfile, DailyLog, WearableConfig, CalculationResult, VisualFoodAnalysis } from '../src/types';
+import { CHILEAN_LA_FOODS, searchFoods, findFoodByBarcode } from '../src/foodDatabase.js';
+import { CHILEAN_RECIPES } from '../src/recipes.js';
+import { Gender, ActivityLevel, Goal, MacroMethod, UserProfile, DailyLog, WearableConfig, CalculationResult, VisualFoodAnalysis } from '../src/types.js';
 
 dotenv.config();
 
