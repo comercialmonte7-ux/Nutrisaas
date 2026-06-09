@@ -2,7 +2,11 @@ import express from 'express';
 const app = express();
 
 app.get('/api/test', (req, res) => {
-  res.json({ status: "ok", message: "Vercel Express serverless function works!" });
+  res.json({ 
+    status: "ok", 
+    message: "Vercel Express serverless function works!",
+    nodeVersion: process.version
+  });
 });
 
 app.post('/api/analyze-food', (req, res) => {
