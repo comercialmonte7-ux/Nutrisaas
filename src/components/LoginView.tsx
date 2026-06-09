@@ -11,9 +11,13 @@ interface LoginViewProps {
 export default function LoginView({ onLoginSuccess, loading, setLoading }: LoginViewProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Read Google Client ID from environment variables or localStorage fallback
+  // Read Google Client ID from environment variables, localStorage fallback, or default hardcoded value
   const [googleClientId, setGoogleClientId] = useState<string>(() => {
-    return (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || localStorage.getItem('nutrisaas_google_client_id') || '';
+    return (
+      (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) ||
+      localStorage.getItem('nutrisaas_google_client_id') ||
+      '369657284487-p7fjkkeejlgof9c4rt60tlgt5im6u10v.apps.googleusercontent.com'
+    );
   });
   const [tempClientIdInput, setTempClientIdInput] = useState('');
 
