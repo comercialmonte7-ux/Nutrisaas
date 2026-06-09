@@ -297,85 +297,110 @@ app.post('/api/analyze-food', async (req, res) => {
   const { imageBase64, mockFoodQuery, goal = "lose_weight" } = req.body;
   const client = getGeminiClient();
 
-  // If we have an actual image and a working Gemini Client, execute real vision!
-  if (client && imageBase64) {
+  // If we have a working Gemini Client, execute live analysis!
+  if (client) {
     try {
-      console.log("Analyzing food image with Gemini Vision...");
-      
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-
-      const imagePart = {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: cleanBase64,
-        },
-      };
-
-      const systemPrompt = `Actúa como un Especialista en Nutrición Clínica y Visión Computacional. 
-Analiza detalladamente la foto del plato suministrado.
-Identifica los ingredientes visibles y estima sus pesos relativos en gramos en base a porciones normales.
+      const systemPrompt = `Actúa como un Especialista en Nutrición Clínica y Visión Computacional.
+Analiza detalladamente el plato suministrado (ya sea por descripción de texto o por una foto).
+Identifica los ingredientes visibles o lógicamente parte de ese plato y estima sus pesos estándar en gramos.
 Suministra los macronutrientes correspondientes (calorías, proteínas, carbohidratos, grasas).
-Calcula y advierte sobre INGREDIENTES OCULTOS típicos que inflan las calorías (ej. aceite de cocina para saltear, mantecas, aderezos de ensalada ricos en aceites, azúcar añadida en salsas). Escoge 1 o 2 ingredientes ocultos típicos asociados con la foto y suminístralos bajo 'hidden_ingredients_found'.
+Calcula y advierte sobre INGREDIENTES OCULTOS típicos que inflan las calorías (ej. aceite de cocina para saltear, mantecas, aderezos de ensalada ricos en aceites, azúcar añadida en salsas). Escoge 1 o 2 ingredientes ocultos típicos asociados con el plato y suminístralos bajo 'hidden_ingredients_found'.
 Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
 
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [
-          imagePart,
-          { text: "Identifica detalladamente esta comida, estima gramos, desglosa macros por ingrediente y busca aceites/aderezos ocultos." }
-        ],
-        config: {
-          systemInstruction: systemPrompt,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              food_name: { type: Type.STRING, description: "Nombre principal o clasificación del plato completo (ej. Lomo liso con puré)" },
-              estimated_weight_g: { type: Type.INTEGER, description: "Peso total estimado del plato en gramos" },
-              ingredients: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING, description: "Nombre del ingrediente básico o componente" },
-                    weight_g: { type: Type.INTEGER },
-                    calories: { type: Type.INTEGER },
-                    protein_g: { type: Type.NUMBER },
-                    carbs_g: { type: Type.NUMBER },
-                    fat_g: { type: Type.NUMBER }
-                  },
-                  required: ["name", "weight_g", "calories", "protein_g", "carbs_g", "fat_g"]
-                }
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          food_name: { type: Type.STRING, description: "Nombre principal o clasificación del plato completo (ej. Marraqueta con palta, Cazuela de pollo, etc.)" },
+          estimated_weight_g: { type: Type.INTEGER, description: "Peso total estimado del plato en gramos" },
+          ingredients: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "Nombre del ingrediente básico o componente" },
+                weight_g: { type: Type.INTEGER },
+                calories: { type: Type.INTEGER },
+                protein_g: { type: Type.NUMBER },
+                carbs_g: { type: Type.NUMBER },
+                fat_g: { type: Type.NUMBER }
               },
-              total_calories: { type: Type.INTEGER },
-              total_protein_g: { type: Type.NUMBER },
-              total_carbs_g: { type: Type.NUMBER },
-              total_fat_g: { type: Type.NUMBER },
-              hidden_ingredients_found: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING, description: "Nombre del ingrediente oculto deletéreo (ej. Aceite de cocina)" },
-                    extra_calories: { type: Type.INTEGER, description: "Calorías incrementales, ej. 120" },
-                    description: { type: Type.STRING, description: "Explicación del porqué de su sospecha científica" }
-                  },
-                  required: ["name", "extra_calories", "description"]
-                }
-              }
-            },
-            required: ["food_name", "estimated_weight_g", "ingredients", "total_calories", "total_protein_g", "total_carbs_g", "total_fat_g", "hidden_ingredients_found"]
+              required: ["name", "weight_g", "calories", "protein_g", "carbs_g", "fat_g"]
+            }
+          },
+          total_calories: { type: Type.INTEGER },
+          total_protein_g: { type: Type.NUMBER },
+          total_carbs_g: { type: Type.NUMBER },
+          total_fat_g: { type: Type.NUMBER },
+          hidden_ingredients_found: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "Nombre del ingrediente oculto deletéreo (ej. Aceite de cocina)" },
+                extra_calories: { type: Type.INTEGER, description: "Calorías incrementales, ej. 120" },
+                description: { type: Type.STRING, description: "Explicación del porqué de su sospecha científica" }
+              },
+              required: ["name", "extra_calories", "description"]
+            }
           }
+        },
+        required: ["food_name", "estimated_weight_g", "ingredients", "total_calories", "total_protein_g", "total_carbs_g", "total_fat_g", "hidden_ingredients_found"]
+      };
+
+      let response;
+
+      if (imageBase64) {
+        console.log("Analyzing food image with Gemini Vision...");
+        
+        let mimeType = "image/jpeg";
+        const mimeTypeMatch = imageBase64.match(/^data:(image\/\w+);base64,/);
+        if (mimeTypeMatch) {
+          mimeType = mimeTypeMatch[1];
         }
-      });
+        const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-      const text = response.text ? response.text.trim() : "{}";
-      const parsedAns = JSON.parse(text);
-      return res.json(parsedAns);
+        const imagePart = {
+          inlineData: {
+            mimeType,
+            data: cleanBase64,
+          },
+        };
 
+        const textPart = {
+          text: `Identifica detalladamente la comida o plato que aparece en esta imagen. Si el nombre del plato sugerido o archivo es "${mockFoodQuery || ''}", utilízalo como contexto de apoyo para mayor precisión culinaria. Estima los ingredientes componentes, sus gramos y calcula calorías y macronutrientes correspondientes, además de hasta 2 sospechas de aceites de cocina o aderezos ocultos.`
+        };
+
+        response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: {
+            parts: [imagePart, textPart]
+          },
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            responseSchema
+          }
+        });
+      } else if (mockFoodQuery) {
+        console.log(`Analyzing typed food description: "${mockFoodQuery}" with Gemini...`);
+        response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: `Analiza detalladamente este plato o comida descrita por el usuario: "${mockFoodQuery}". Identifica los ingredientes básicos que lo componen típicamente en la gastronomía (especialmente chilena si aplica), estima gramos razonables, desglosa calorías, proteínas, carbohidratos, grasas por ingrediente y sugiere hasta 2 ingredientes ocultos comunes de su preparación.`,
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: "application/json",
+            responseSchema
+          }
+        });
+      }
+
+      if (response && response.text) {
+        const text = response.text.trim();
+        const parsedAns = JSON.parse(text);
+        return res.json(parsedAns);
+      }
     } catch (err: any) {
-      console.error("Gemini Vision processing error, falling back to database prediction:", err);
-      // Fallback allowed
+      console.error("Gemini live food analysis failed, falling back to static preset database prediction:", err);
     }
   }
 

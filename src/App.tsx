@@ -671,11 +671,20 @@ export default function App() {
         const data = await res.json();
         setAiAnalysisResult(data);
         setPortionMultiplier(1.0);
-        setHiddenIngredientsForm([
-          { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
-          { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
-          { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
-        ]);
+        
+        const checklist = (data.hidden_ingredients_found || []).map((item: any) => ({
+          name: `${item.name}: ${item.description}`,
+          extra_calories: item.extra_calories || 120,
+          checked: false
+        }));
+        if (checklist.length === 0) {
+          checklist.push(
+            { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+            { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+            { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false }
+          );
+        }
+        setHiddenIngredientsForm(checklist);
         setScanningStatus(null);
       } else {
         throw new Error('Server returned non-ok status');
@@ -736,6 +745,20 @@ export default function App() {
           const data = await res.json();
           setAiAnalysisResult(data);
           setPortionMultiplier(1.0);
+
+          const checklist = (data.hidden_ingredients_found || []).map((item: any) => ({
+            name: `${item.name}: ${item.description}`,
+            extra_calories: item.extra_calories || 120,
+            checked: false
+          }));
+          if (checklist.length === 0) {
+            checklist.push(
+              { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
+              { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
+              { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false }
+            );
+          }
+          setHiddenIngredientsForm(checklist);
           setScanningStatus(null);
         } else {
           throw new Error('Analysis failed on server');
