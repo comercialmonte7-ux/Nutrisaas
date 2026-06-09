@@ -94,6 +94,104 @@ export default function App() {
     { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
   ]);
   const [barcodeSearchQuery, setBarcodeSearchQuery] = useState("");
+
+  // Persistent Scanned History State
+  const [scannedHistory, setScannedHistory] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('nutrisaas_scanned_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+
+  const addToScannedHistory = (data: VisualFoodAnalysis, photoBase64: string | null) => {
+    const historyItem = {
+      id: `scan-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      food_name: data.food_name,
+      estimated_weight_g: data.estimated_weight_g,
+      ingredients: data.ingredients,
+      total_calories: data.total_calories,
+      total_protein_g: data.total_protein_g,
+      total_carbs_g: data.total_carbs_g,
+      total_fat_g: data.total_fat_g,
+      photoBase64: photoBase64
+    };
+
+    setScannedHistory(prev => {
+      const updated = [historyItem, ...prev].slice(0, 15); // limit to 15 items
+      localStorage.setItem('nutrisaas_scanned_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleDeleteScannedItem = (id: string) => {
+    setScannedHistory(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      localStorage.setItem('nutrisaas_scanned_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleLogHistoricalItem = async (historicalItem: any, mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    setLoading(true);
+    const payload = {
+      log_date: new Date().toISOString().split('T')[0],
+      custom_food_name: historicalItem.food_name,
+      calories: historicalItem.total_calories,
+      protein_g: historicalItem.total_protein_g,
+      carbs_g: historicalItem.total_carbs_g,
+      fat_g: historicalItem.total_fat_g,
+      serving_count: 1.0,
+      meal_type: mealType
+    };
+
+    try {
+      if (isStaticMode) {
+        throw new Error('Static Mode Active');
+      }
+
+      const res = await fetch('/api/database/daily_logs/insert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': activeUserId || ''
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setDbStatusMsg({
+          type: 'success',
+          text: `¡Platillo del historial registrado exitosamente en tu bitácora de hoy!`
+        });
+        fetchUserData();
+        setMobileScreen('home');
+      } else {
+        throw new Error('Server insert failed');
+      }
+    } catch (err) {
+      const localLogsKey = 'nutrisaas_local_logs';
+      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const newLog = {
+        id: `local-log-${Date.now()}`,
+        user_id: activeUserId,
+        ...payload,
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      setDbStatusMsg({
+        type: 'success',
+        text: `¡Platillo del historial registrado exitosamente en tu bitácora (Local)!`
+      });
+      fetchUserData();
+      setMobileScreen('home');
+    } finally {
+      setLoading(false);
+    }
+  };
   const [localFoodSearchQuery, setLocalFoodSearchQuery] = useState("");
   const [foodSearchResults, setFoodSearchResults] = useState<any[]>([]);
 
@@ -647,6 +745,7 @@ export default function App() {
         setTimeout(() => {
           const analysis = getVisualAnalysisFallback(presetName);
           setAiAnalysisResult(analysis);
+          addToScannedHistory(analysis, null);
           setPortionMultiplier(1.0);
           setHiddenIngredientsForm([
             { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
@@ -669,6 +768,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setAiAnalysisResult(data);
+        addToScannedHistory(data, null);
         setPortionMultiplier(1.0);
         
         const checklist = (data.hidden_ingredients_found || []).map((item: any) => ({
@@ -701,6 +801,7 @@ export default function App() {
       setTimeout(() => {
         const analysis = getVisualAnalysisFallback(presetName);
         setAiAnalysisResult(analysis);
+        addToScannedHistory(analysis, null);
         setPortionMultiplier(1.0);
         setHiddenIngredientsForm([
           { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
@@ -771,6 +872,7 @@ export default function App() {
           setTimeout(() => {
             const analysis = getVisualAnalysisFallback(file.name);
             setAiAnalysisResult(analysis);
+            addToScannedHistory(analysis, base64String);
             setPortionMultiplier(1.0);
             setHiddenIngredientsForm([
               { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
@@ -794,6 +896,7 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           setAiAnalysisResult(data);
+          addToScannedHistory(data, base64String);
           setPortionMultiplier(1.0);
 
           const checklist = (data.hidden_ingredients_found || []).map((item: any) => ({
@@ -1404,6 +1507,9 @@ export default function App() {
                 handleAddAnalyzedFoodToLog={handleAddAnalyzedFoodToLog}
                 scannerError={scannerError}
                 setScannerError={setScannerError}
+                scannedHistory={scannedHistory}
+                handleDeleteScannedItem={handleDeleteScannedItem}
+                handleLogHistoricalItem={handleLogHistoricalItem}
               />
             )}
 

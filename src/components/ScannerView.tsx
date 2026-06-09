@@ -18,6 +18,9 @@ export interface ScannerViewProps {
   handleAddAnalyzedFoodToLog: () => void;
   scannerError: string | null;
   setScannerError: (val: string | null) => void;
+  scannedHistory?: any[];
+  handleDeleteScannedItem?: (id: string) => void;
+  handleLogHistoricalItem?: (item: any, mealType: any) => void;
 }
 
 export default function ScannerView({
@@ -35,10 +38,23 @@ export default function ScannerView({
   setLoggedMealType,
   handleAddAnalyzedFoodToLog,
   scannerError,
-  setScannerError
+  setScannerError,
+  scannedHistory = [],
+  handleDeleteScannedItem,
+  handleLogHistoricalItem
 }: ScannerViewProps) {
   const [typedFoodDescription, setTypedFoodDescription] = useState("");
   const [isEditingResult, setIsEditingResult] = useState(false);
+  const resultsRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto scroll to results on mobile / layout shift when a result becomes active
+  React.useEffect(() => {
+    if (aiAnalysisResult && resultsRef.current) {
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+    }
+  }, [aiAnalysisResult]);
 
   // Helper to trigger calculation based on typed description
   const handleTypedAnalyze = () => {
@@ -128,344 +144,440 @@ export default function ScannerView({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in" id="scanner_view_container">
-      {/* Viewfinder, Custom Text & Presets */}
-      <div className="lg:col-span-6 bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-6">
-        <div>
-          <h3 className="text-base font-bold flex items-center gap-1.5 text-stone-900">
-            <Camera className="h-5 w-5 text-[#5A7C56]" /> Lente de Reconocimiento y Carga de Fotos
-          </h3>
-          <p className="text-xs text-stone-400 font-bold mt-0.5">Sube la foto de tu plato para desglosar sus macros</p>
-        </div>
+    <div className="space-y-8 animate-fade-in" id="scanner_view_wrapper">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8" id="scanner_view_container">
+        {/* Viewfinder, Custom Text & Presets */}
+        <div className="lg:col-span-6 bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-6">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-1.5 text-stone-900">
+              <Camera className="h-5 w-5 text-[#5A7C56]" /> Lente de Reconocimiento y Carga de Fotos
+            </h3>
+            <p className="text-xs text-stone-400 font-bold mt-0.5">Sube la foto de tu plato para desglosar sus macros</p>
+          </div>
 
-        {scannerError && (
-          <div className="bg-rose-50 border border-rose-250 rounded-2xl p-4 text-stone-700 space-y-2.5 shadow-3xs animate-fade-in">
-            <div className="flex items-center gap-2 text-rose-800">
-              <span className="text-base">⚠️</span>
-              <strong className="font-extrabold text-stone-900">Error en Reconocimiento de Imagen</strong>
-            </div>
-            <p className="text-xs font-bold leading-relaxed text-stone-600">{scannerError}</p>
-            {(scannerError.includes("API_KEY") || scannerError.includes("api_key")) && (
-              <div className="bg-white/90 border border-rose-200/50 rounded-xl p-3.5 space-y-2">
-                <span className="text-[11px] font-black text-[#3D5C3A] uppercase tracking-wider block">🛠️ Guía de solución paso a paso:</span>
-                <ol className="list-decimal pl-4 space-y-1 text-[11px] leading-relaxed font-bold text-stone-600">
-                  <li>Inicia sesión en tu cuenta de <strong className="text-stone-900">Vercel</strong> y abre el proyecto de esta app.</li>
-                  <li>Ve a la pestaña de <strong className="text-stone-900">Settings</strong> e ingresa a <strong className="text-stone-900">Environment Variables</strong>.</li>
-                  <li>Agrega una nueva variable de entorno:
-                    <div className="my-1 text-[10px] bg-stone-100 p-1.5 rounded-lg border font-mono text-stone-900 select-all font-bold">
-                      Key: GEMINI_API_KEY
-                    </div>
-                  </li>
-                  <li>Pega el valor de tu clave API de Gemini y guarda.</li>
-                  <li>Redespliega el proyecto en Vercel para que los cambios se activen.</li>
-                </ol>
+          {scannerError && (
+            <div className="bg-rose-50 border border-rose-250 rounded-2xl p-4 text-stone-700 space-y-2.5 shadow-3xs animate-fade-in">
+              <div className="flex items-center gap-2 text-rose-800">
+                <span className="text-base">⚠️</span>
+                <strong className="font-extrabold text-stone-900">Error en Reconocimiento de Imagen</strong>
               </div>
-            )}
-            <div className="flex justify-end pt-1">
-              <button 
-                onClick={() => setScannerError(null)}
-                className="bg-stone-900 hover:bg-stone-850 text-white px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wider transition cursor-pointer"
-              >
-                Cerrar Aviso
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="relative w-full aspect-video bg-stone-100 rounded-xl overflow-hidden border flex flex-col justify-between p-4">
-          <div className="absolute inset-4 pointer-events-none border border-dashed border-[#5A7C56]/30 rounded-lg"></div>
-          {cameraPhotoBase64 ? (
-            <img src={cameraPhotoBase64} alt="Plato" className="absolute inset-0 w-full h-full object-cover" />
-          ) : (
-            <p className="text-xs text-stone-400 italic text-center m-auto">Foto activa o previsualización del plato</p>
-          )}
-          <label className="cursor-pointer bg-[#5A7C56] hover:bg-[#4D6949] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition m-auto z-10 flex gap-1.5 shadow-3xs">
-            <Upload className="h-4 w-4" /> Tomar o Cargar Foto
-            <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-          </label>
-        </div>
-
-        {scanningStatus ? (
-          <p className="text-xs text-[#5A7C56] font-extrabold text-center bg-emerald-50 py-2 rounded-lg border border-emerald-100 animate-pulse">
-            ⏳ {scanningStatus}
-          </p>
-        ) : null}
-
-        {/* Dynamic description of what is in the photo */}
-        <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
-          <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
-            💭 1. ¿Qué comida u plato hay en la foto?
-          </label>
-          <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="Escribe ej: Arroz con bistec y ensalada o tallarines con tomate..."
-              value={typedFoodDescription}
-              onChange={(e) => setTypedFoodDescription(e.target.value)}
-              className="flex-1 bg-white border border-stone-200 text-xs px-3 py-2 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-[#5A7C56]"
-              onKeyDown={(e) => { if (e.key === 'Enter') handleTypedAnalyze(); }}
-            />
-            <button 
-              onClick={handleTypedAnalyze}
-              className="bg-[#5A7C56] hover:bg-[#4D6949] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 shrink-0"
-            >
-              <Sparkles className="h-3.5 w-3.5" /> Calcular
-            </button>
-          </div>
-          <p className="text-[10px] text-stone-400 font-bold">
-            Ingresa lo que comiste para que la base de datos de precisión calcule las calorías reales.
-          </p>
-        </div>
-
-        {/* Quick Chilean Presets */}
-        <div className="space-y-2">
-          <span className="text-[10px] text-stone-400 uppercase font-black block tracking-wider">Demostraciones y Presets Chilenos:</span>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
-            <button onClick={() => { setTypedFoodDescription("Marraqueta con palta"); handleApplyPresetPhoto("palta"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🥑 Marraqueta c/Palta</button>
-            <button onClick={() => { setTypedFoodDescription("Lomo liso con ensalada"); handleApplyPresetPhoto("lomo"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🥩 Lomo con Ensalada</button>
-            <button onClick={() => { setTypedFoodDescription("Porotos con riendas"); handleApplyPresetPhoto("poroto"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🍲 Porotos c/Riendas</button>
-            <button onClick={() => { setTypedFoodDescription("Pollo con arroz"); handleApplyPresetPhoto("pollo"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🍗 Pollo con Arroz</button>
-            <button onClick={() => { setTypedFoodDescription("Pescado con papas"); handleApplyPresetPhoto("pescado"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🐟 Pescado c/Papas</button>
-            <button onClick={() => { setTypedFoodDescription("Tallarines boloñesa"); handleApplyPresetPhoto("pasta"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🍝 Fideos Boloñesa</button>
-            <button onClick={() => { setTypedFoodDescription("Completo italiano"); handleApplyPresetPhoto("completo"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🌭 Completo Italiano</button>
-            <button onClick={() => { setTypedFoodDescription("Empanada de pino"); handleApplyPresetPhoto("empanada"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🥧 Empanada de Pino</button>
-            <button onClick={() => { setTypedFoodDescription("Cazuela de vacuno"); handleApplyPresetPhoto("cazuela"); }} className="bg-stone-50 border p-2 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-left transition">🥣 Cazuela Vacuno</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Analysis Output & Precision Editor */}
-      <div className="lg:col-span-6" id="scanner_results_panel">
-        {aiAnalysisResult ? (
-          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-5">
-            <div className="flex justify-between items-center border-b pb-3.5">
-              <div>
-                <span className="text-[10px] text-[#5A7C56] font-extrabold uppercase bg-[#EFF4EE] px-2 py-0.5 rounded-full border border-emerald-100">
-                  Desglose del Plato
-                </span>
-                <h4 className="text-base font-black text-stone-900 mt-1">{aiAnalysisResult.food_name}</h4>
-              </div>
-              <button 
-                onClick={() => setIsEditingResult(!isEditingResult)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition shrink-0 ${isEditingResult ? "bg-[#5A7C56] text-white hover:bg-[#4D6949]" : "bg-stone-100 text-stone-700 hover:bg-stone-200"}`}
-              >
-                {isEditingResult ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" /> Guardar Edición
-                  </>
-                ) : (
-                  <>
-                    <Edit3 className="h-3.5 w-3.5" /> Editar Precisión
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Read-only list OR Interactive macro precision editor */}
-            {isEditingResult ? (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-stone-500">Nombre del Plato:</label>
-                  <input 
-                    type="text" 
-                    value={aiAnalysisResult.food_name} 
-                    onChange={e => setAiAnalysisResult({ ...aiAnalysisResult, food_name: e.target.value })}
-                    className="w-full bg-stone-50 border text-xs px-2 py-1.5 rounded-lg focus:outline-hidden"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] uppercase font-bold text-stone-500">Desglose de Ingredientes:</label>
-                    <button 
-                      onClick={handleAddIngredientRow}
-                      className="text-[#5A7C56] font-bold text-xs flex items-center gap-1 hover:underline"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Añadir Fila
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 bg-stone-50 p-3 rounded-xl border border-stone-100 max-h-[240px] overflow-y-auto">
-                    {aiAnalysisResult.ingredients.map((ing, idx) => (
-                      <div key={idx} className="bg-white p-2.5 rounded-lg border shadow-3xs space-y-2 relative">
-                        <button 
-                          onClick={() => handleDeleteIngredient(idx)}
-                          className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
-                          title="Eliminar ingrediente"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-
-                        <div className="grid grid-cols-12 gap-2">
-                          <div className="col-span-8">
-                            <label className="text-[9px] font-bold text-stone-400 block">Ingrediente:</label>
-                            <input 
-                              type="text" 
-                              value={ing.name} 
-                              onChange={e => handleUpdateIngredient(idx, 'name', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded focus:outline-hidden"
-                            />
-                          </div>
-                          <div className="col-span-4 pr-6">
-                            <label className="text-[9px] font-bold text-stone-400 block">Peso (g):</label>
-                            <input 
-                              type="number" 
-                              value={ing.weight_g} 
-                              onChange={e => handleUpdateIngredient(idx, 'weight_g', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-1">
-                          <div>
-                            <label className="text-[8px] font-bold text-stone-400 block">Kcal:</label>
-                            <input 
-                              type="number" 
-                              value={ing.calories} 
-                              onChange={e => handleUpdateIngredient(idx, 'calories', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-bold text-stone-400 block">Prot (g):</label>
-                            <input 
-                              type="number" 
-                              step="0.1"
-                              value={ing.protein_g} 
-                              onChange={e => handleUpdateIngredient(idx, 'protein_g', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-bold text-stone-400 block">Carb (g):</label>
-                            <input 
-                              type="number" 
-                              step="0.1"
-                              value={ing.carbs_g} 
-                              onChange={e => handleUpdateIngredient(idx, 'carbs_g', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[8px] font-bold text-stone-400 block">Grasa (g):</label>
-                            <input 
-                              type="number" 
-                              step="0.1"
-                              value={ing.fat_g} 
-                              onChange={e => handleUpdateIngredient(idx, 'fat_g', e.target.value)}
-                              className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
-                            />
-                          </div>
-                        </div>
+              <p className="text-xs font-bold leading-relaxed text-stone-600">{scannerError}</p>
+              {(scannerError.includes("API_KEY") || scannerError.includes("api_key")) && (
+                <div className="bg-white/90 border border-rose-200/50 rounded-xl p-3.5 space-y-2">
+                  <span className="text-[11px] font-black text-[#3D5C3A] uppercase tracking-wider block">🛠️ Guía de solución paso a paso:</span>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] leading-relaxed font-bold text-stone-600">
+                    <li>Inicia sesión en tu cuenta de <strong className="text-stone-900">Vercel</strong> y abre el proyecto de esta app.</li>
+                    <li>Ve a la pestaña de <strong className="text-stone-900">Settings</strong> e ingresa a <strong className="text-stone-900">Environment Variables</strong>.</li>
+                    <li>Agrega una nueva variable de entorno:
+                      <div className="my-1 text-[10px] bg-stone-100 p-1.5 rounded-lg border font-mono text-stone-900 select-all font-bold">
+                        Key: GEMINI_API_KEY
                       </div>
-                    ))}
+                    </li>
+                    <li>Pega el valor de tu clave API de Gemini y guarda.</li>
+                    <li>Redespliega el proyecto en Vercel para que los cambios se activen.</li>
+                  </ol>
+                </div>
+              )}
+              <div className="flex justify-end pt-1">
+                <button 
+                  onClick={() => setScannerError(null)}
+                  className="bg-stone-900 hover:bg-stone-850 text-white px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wider transition cursor-pointer"
+                >
+                  Cerrar Aviso
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="relative w-full aspect-video bg-stone-100 rounded-xl overflow-hidden border flex flex-col justify-between p-4">
+            <div className="absolute inset-4 pointer-events-none border border-dashed border-[#5A7C56]/30 rounded-lg"></div>
+            {cameraPhotoBase64 ? (
+              <img src={cameraPhotoBase64} alt="Plato" className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <p className="text-xs text-stone-400 italic text-center m-auto">Foto activa o previsualización del plato</p>
+            )}
+            <label className="cursor-pointer bg-[#5A7C56] hover:bg-[#4D6949] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition m-auto z-10 flex gap-1.5 shadow-3xs">
+              <Upload className="h-4 w-4" /> Tomar o Cargar Foto
+              <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+            </label>
+          </div>
+
+          {scanningStatus ? (
+            <p className="text-xs text-[#5A7C56] font-extrabold text-center bg-emerald-50 py-2 rounded-lg border border-emerald-100 animate-pulse">
+              ⏳ {scanningStatus}
+            </p>
+          ) : null}
+
+          {/* Dynamic description of what is in the photo */}
+          <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
+            <label className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
+              💭 1. ¿Qué comida u plato hay en la foto?
+            </label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                placeholder="Escribe ej: Arroz con bistec y ensalada o tallarines con tomate..."
+                value={typedFoodDescription}
+                onChange={(e) => setTypedFoodDescription(e.target.value)}
+                className="flex-1 bg-white border border-stone-200 text-xs px-3 py-2 rounded-xl focus:outline-hidden"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleTypedAnalyze(); }}
+              />
+              <button 
+                onClick={handleTypedAnalyze}
+                className="bg-[#5A7C56] hover:bg-[#4D6949] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Calcular
+              </button>
+            </div>
+            <p className="text-[10px] text-stone-400 font-bold">
+              Ingresa lo que comiste para que la base de datos de precisión calcule las calorías reales.
+            </p>
+          </div>
+
+          {/* Quick Chilean Presets - Compact Horizontal Carousel for Mobile height relief */}
+          <div className="space-y-2">
+            <span className="text-[10px] text-stone-400 uppercase font-black block tracking-wider">Demos rápidos de precisión:</span>
+            <div className="flex overflow-x-auto gap-2 pb-2 pt-1 -mx-2 px-2 scrollbar-thin scrollbar-thumb-stone-200 scrollbar-track-transparent">
+              <button onClick={() => { setTypedFoodDescription("Marraqueta con palta"); handleApplyPresetPhoto("palta"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🥑 Marraqueta c/Palta</button>
+              <button onClick={() => { setTypedFoodDescription("Lomo liso con ensalada"); handleApplyPresetPhoto("lomo"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🥩 Lomo con Ensalada</button>
+              <button onClick={() => { setTypedFoodDescription("Porotos con riendas"); handleApplyPresetPhoto("poroto"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🍲 Porotos c/Riendas</button>
+              <button onClick={() => { setTypedFoodDescription("Pollo con arroz"); handleApplyPresetPhoto("pollo"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🍗 Pollo con Arroz</button>
+              <button onClick={() => { setTypedFoodDescription("Pescado con papas"); handleApplyPresetPhoto("pescado"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🐟 Pescado c/Papas</button>
+              <button onClick={() => { setTypedFoodDescription("Tallarines boloñesa"); handleApplyPresetPhoto("pasta"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🍝 Fideos Boloñesa</button>
+              <button onClick={() => { setTypedFoodDescription("Completo italiano"); handleApplyPresetPhoto("completo"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🌭 Completo Italiano</button>
+              <button onClick={() => { setTypedFoodDescription("Empanada de pino"); handleApplyPresetPhoto("empanada"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🥧 Empanada de Pino</button>
+              <button onClick={() => { setTypedFoodDescription("Cazuela de vacuno"); handleApplyPresetPhoto("cazuela"); }} className="bg-stone-50 border p-2 py-1.5 rounded-xl font-bold hover:bg-[#EFF4EE] cursor-pointer text-xs transition flex-shrink-0 flex items-center gap-1">🥣 Cazuela Vacuno</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Analysis Output & Precision Editor */}
+        <div className="lg:col-span-6" id="scanner_results_panel" ref={resultsRef}>
+          {aiAnalysisResult ? (
+            <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-5">
+              <div className="flex justify-between items-center border-b pb-3.5">
+                <div>
+                  <span className="text-[10px] text-[#5A7C56] font-extrabold uppercase bg-[#EFF4EE] px-2 py-0.5 rounded-full border border-emerald-100">
+                    Desglose del Plato
+                  </span>
+                  <h4 className="text-base font-black text-stone-900 mt-1">{aiAnalysisResult.food_name}</h4>
+                </div>
+                <button 
+                  onClick={() => setIsEditingResult(!isEditingResult)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition shrink-0 ${isEditingResult ? "bg-[#5A7C56] text-white hover:bg-[#4D6949]" : "bg-stone-100 text-stone-700 hover:bg-stone-200"}`}
+                >
+                  {isEditingResult ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Guardar Edición
+                    </>
+                  ) : (
+                    <>
+                      <Edit3 className="h-3.5 w-3.5" /> Editar Precisión
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Read-only list OR Interactive macro precision editor */}
+              {isEditingResult ? (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-stone-500">Nombre del Plato:</label>
+                    <input 
+                      type="text" 
+                      value={aiAnalysisResult.food_name} 
+                      onChange={e => setAiAnalysisResult({ ...aiAnalysisResult, food_name: e.target.value })}
+                      className="w-full bg-stone-50 border text-xs px-2 py-1.5 rounded-lg focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-bold text-stone-500">Desglose de Ingredientes:</label>
+                      <button 
+                        onClick={handleAddIngredientRow}
+                        className="text-[#5A7C56] font-bold text-xs flex items-center gap-1 hover:underline"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Añadir Fila
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 bg-stone-50 p-3 rounded-xl border border-stone-100 max-h-[240px] overflow-y-auto">
+                      {aiAnalysisResult.ingredients.map((ing, idx) => (
+                        <div key={idx} className="bg-white p-2.5 rounded-lg border shadow-3xs space-y-2 relative">
+                          <button 
+                            onClick={() => handleDeleteIngredient(idx)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
+                            title="Eliminar ingrediente"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+
+                          <div className="grid grid-cols-12 gap-2">
+                            <div className="col-span-8">
+                              <label className="text-[9px] font-bold text-stone-400 block">Ingrediente:</label>
+                              <input 
+                                type="text" 
+                                value={ing.name} 
+                                onChange={e => handleUpdateIngredient(idx, 'name', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded focus:outline-hidden"
+                              />
+                            </div>
+                            <div className="col-span-4 pr-6">
+                              <label className="text-[9px] font-bold text-stone-400 block">Peso (g):</label>
+                              <input 
+                                type="number" 
+                                value={ing.weight_g} 
+                                onChange={e => handleUpdateIngredient(idx, 'weight_g', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-1">
+                            <div>
+                              <label className="text-[8px] font-bold text-stone-400 block">Kcal:</label>
+                              <input 
+                                type="number" 
+                                value={ing.calories} 
+                                onChange={e => handleUpdateIngredient(idx, 'calories', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[8px] font-bold text-stone-400 block">Prot (g):</label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                value={ing.protein_g} 
+                                onChange={e => handleUpdateIngredient(idx, 'protein_g', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[8px] font-bold text-stone-400 block">Carb (g):</label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                value={ing.carbs_g} 
+                                onChange={e => handleUpdateIngredient(idx, 'carbs_g', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[8px] font-bold text-stone-400 block">Grasa (g):</label>
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                value={ing.fat_g} 
+                                onChange={e => handleUpdateIngredient(idx, 'fat_g', e.target.value)}
+                                className="w-full bg-stone-50 border text-[11px] px-1.5 py-0.5 rounded font-mono focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <div className="space-y-1.5 text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-200">
+                  {aiAnalysisResult.ingredients.map((ing, idx) => (
+                    <p key={idx} className="flex justify-between items-center py-0.5 border-b border-stone-100 last:border-0">
+                      <span>● {ing.name} ({Math.round(ing.weight_g * portionMultiplier)}g)</span> 
+                      <strong className="font-mono">{Math.round(ing.calories * portionMultiplier)} kcal</strong>
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Adjust Portion */}
+              <div className="space-y-1 bg-[#F9FAF9] p-3 rounded-xl border border-[#EFF4EE]">
+                <p className="text-xs font-bold flex justify-between">
+                  <span>Porción Consumida: {Math.round(portionMultiplier * 100)}%</span> 
+                  <strong className="font-mono">{Math.round(aiAnalysisResult.estimated_weight_g * portionMultiplier)}g</strong>
+                </p>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="2.5" 
+                  step="0.1" 
+                  value={portionMultiplier} 
+                  onChange={e => setPortionMultiplier(parseFloat(e.target.value))} 
+                  className="w-full h-1.5 bg-stone-200 cursor-pointer accent-[#5A7C56]" 
+                />
+                <span className="text-[10px] text-stone-400 block">Desliza para achicar o agrandar el plato total</span>
               </div>
-            ) : (
-              <div className="space-y-1.5 text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-200">
-                {aiAnalysisResult.ingredients.map((ing, idx) => (
-                  <p key={idx} className="flex justify-between items-center py-0.5 border-b border-stone-100 last:border-0">
-                    <span>● {ing.name} ({Math.round(ing.weight_g * portionMultiplier)}g)</span> 
-                    <strong className="font-mono">{Math.round(ing.calories * portionMultiplier)} kcal</strong>
-                  </p>
+
+              {/* Hidden ingredients info */}
+              <div className="space-y-1.5 font-medium text-xs text-stone-700 border-t pt-2">
+                <p className="font-bold flex items-center gap-1 text-stone-800">
+                  <Info className="h-4 w-4 text-[#5A7C56]" /> ¿Considerar aceites u aderezos ocultos?
+                </p>
+                {hiddenIngredientsForm.map((item, idx) => (
+                  <label key={idx} className="flex items-center gap-2 mt-1 cursor-pointer hover:text-stone-900">
+                    <input 
+                      type="checkbox" 
+                      checked={item.checked} 
+                      onChange={e => {
+                        const u = [...hiddenIngredientsForm];
+                        u[idx].checked = e.target.checked;
+                        setHiddenIngredientsForm(u);
+                      }} 
+                      className="rounded text-[#5A7C56] focus:ring-[#5A7C56]" 
+                    />
+                    <span>{item.name} (+{item.extra_calories} kcal)</span>
+                  </label>
                 ))}
               </div>
-            )}
 
-            {/* Adjust Portion */}
-            <div className="space-y-1 bg-[#F9FAF9] p-3 rounded-xl border border-[#EFF4EE]">
-              <p className="text-xs font-bold flex justify-between">
-                <span>Porción Consumida: {Math.round(portionMultiplier * 100)}%</span> 
-                <strong className="font-mono">{Math.round(aiAnalysisResult.estimated_weight_g * portionMultiplier)}g</strong>
-              </p>
-              <input 
-                type="range" 
-                min="0.5" 
-                max="2.5" 
-                step="0.1" 
-                value={portionMultiplier} 
-                onChange={e => setPortionMultiplier(parseFloat(e.target.value))} 
-                className="w-full h-1.5 bg-stone-200 cursor-pointer accent-[#5A7C56]" 
-              />
-              <span className="text-[10px] text-stone-400 block">Desliza para achicar o agrandar el plato total</span>
-            </div>
-
-            {/* Hidden ingredients info */}
-            <div className="space-y-1.5 font-medium text-xs text-stone-700 border-t pt-2">
-              <p className="font-bold flex items-center gap-1 text-stone-800">
-                <Info className="h-4 w-4 text-[#5A7C56]" /> ¿Considerar aceites u aderezos ocultos?
-              </p>
-              {hiddenIngredientsForm.map((item, idx) => (
-                <label key={idx} className="flex items-center gap-2 mt-1 cursor-pointer hover:text-stone-900">
-                  <input 
-                    type="checkbox" 
-                    checked={item.checked} 
-                    onChange={e => {
-                      const u = [...hiddenIngredientsForm];
-                      u[idx].checked = e.target.checked;
-                      setHiddenIngredientsForm(u);
-                    }} 
-                    className="rounded text-[#5A7C56] focus:ring-[#5A7C56]" 
-                  />
-                  <span>{item.name} (+{item.extra_calories} kcal)</span>
-                </label>
-              ))}
-            </div>
-
-            {/* Live calculated macros readout */}
-            <div className="bg-[#EFF4EE] text-emerald-950 p-4 rounded-xl border border-emerald-100 space-y-2">
-              <div className="flex justify-between text-xs font-bold border-b border-emerald-200/40 pb-2">
-                <span>Total Estimado del Registro:</span>
-                <span className="font-mono text-sm font-black">
-                  {Math.round(aiAnalysisResult.total_calories * portionMultiplier) + 
-                   hiddenIngredientsForm.filter(i => i.checked).reduce((s, it) => s + it.extra_calories, 0)} kcal
-                </span>
+              {/* Live calculated macros readout */}
+              <div className="bg-[#EFF4EE] text-emerald-950 p-4 rounded-xl border border-emerald-100 space-y-2">
+                <div className="flex justify-between text-xs font-bold border-b border-emerald-200/40 pb-2">
+                  <span>Total Estimado del Registro:</span>
+                  <span className="font-mono text-sm font-black">
+                    {Math.round(aiAnalysisResult.total_calories * portionMultiplier) + 
+                     hiddenIngredientsForm.filter(i => i.checked).reduce((s, it) => s + it.extra_calories, 0)} kcal
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 text-center text-[10px] font-bold text-emerald-800 pt-0.5 font-mono">
+                  <div>PRO: {((aiAnalysisResult.total_protein_g ?? 0) * portionMultiplier).toFixed(1)}g</div>
+                  <div>CARB: {((aiAnalysisResult.total_carbs_g ?? 0) * portionMultiplier).toFixed(1)}g</div>
+                  <div>GRASA: {(((aiAnalysisResult.total_fat_g ?? 0) * portionMultiplier) + (hiddenIngredientsForm.filter(i => i.checked).reduce((s, it) => s + it.extra_calories, 0) / 9)).toFixed(1)}g</div>
+                </div>
               </div>
-              <div className="grid grid-cols-3 text-center text-[10px] font-bold text-emerald-800 pt-0.5 font-mono">
-                <div>PRO: {((aiAnalysisResult.total_protein_g ?? 0) * portionMultiplier).toFixed(1)}g</div>
-                <div>CARB: {((aiAnalysisResult.total_carbs_g ?? 0) * portionMultiplier).toFixed(1)}g</div>
-                <div>GRASA: {(((aiAnalysisResult.total_fat_g ?? 0) * portionMultiplier) + (hiddenIngredientsForm.filter(i => i.checked).reduce((s, it) => s + it.extra_calories, 0) / 9)).toFixed(1)}g</div>
-              </div>
-            </div>
 
-            {/* Meal Logging Choice */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-stone-500 uppercase block">⏰ Tipo de Comida a registrar:</label>
-              <select 
-                value={loggedMealType} 
-                onChange={e => setLoggedMealType(e.target.value as any)} 
-                className="w-full bg-stone-50 border border-stone-200 p-2.5 rounded-xl text-xs font-bold focus:outline-hidden focus:ring-1 focus:ring-[#5A7C56]"
+              {/* Meal Logging Choice */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-stone-500 uppercase block">⏰ Tipo de Comida a registrar:</label>
+                <select 
+                  value={loggedMealType} 
+                  onChange={e => setLoggedMealType(e.target.value as any)} 
+                  className="w-full bg-stone-50 border border-stone-200 p-2.5 rounded-xl text-xs font-bold focus:outline-hidden"
+                >
+                  <option value="breakfast">🌅 Desayuno</option>
+                  <option value="lunch">☀️ Almuerzo</option>
+                  <option value="dinner">🌙 Cena</option>
+                  <option value="snack">🍎 Snack / Colación</option>
+                </select>
+              </div>
+
+              <button 
+                onClick={handleAddAnalyzedFoodToLog} 
+                className="w-full bg-[#5A7C56] hover:bg-[#4D6949] text-white py-3 rounded-xl text-xs font-bold transition cursor-pointer shadow-3xs flex items-center justify-center gap-1.5"
               >
-                <option value="breakfast">🌅 Desayuno</option>
-                <option value="lunch">☀️ Almuerzo</option>
-                <option value="dinner">🌙 Cena</option>
-                <option value="snack">🍎 Snack / Colación</option>
-              </select>
+                Registrar Plato en Mi Bitácora
+              </button>
             </div>
+          ) : (
+            <div className="bg-stone-50 rounded-2xl p-6 border-2 border-dashed border-stone-200 text-center py-16 flex flex-col items-center justify-center space-y-3">
+              <div className="h-12 w-12 bg-stone-100 rounded-full flex items-center justify-center text-stone-400">
+                <Camera className="h-6 w-6" />
+              </div>
+              <div className="max-w-xs space-y-1">
+                <p className="font-bold text-stone-700 text-xs text-center">¡Prepara el lente inteligente!</p>
+                <p className="text-stone-400 text-[10px] leading-relaxed">
+                  Carga una foto de tu plato u haz clic en un preset rápido para obtener el desglose automático de calorías, proteínas y carbohidratos.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
-            <button 
-              onClick={handleAddAnalyzedFoodToLog} 
-              className="w-full bg-[#5A7C56] hover:bg-[#4D6949] text-white py-3 rounded-xl text-xs font-bold transition cursor-pointer shadow-3xs flex items-center justify-center gap-1.5"
-            >
-              Registrar Plato en Mi Bitácora
-            </button>
-          </div>
-        ) : (
-          <div className="bg-stone-50 rounded-2xl p-6 border-2 border-dashed border-stone-200 text-center py-16 flex flex-col items-center justify-center space-y-3">
-            <div className="h-12 w-12 bg-stone-100 rounded-full flex items-center justify-center text-stone-400">
-              <Camera className="h-6 w-6" />
-            </div>
-            <div className="max-w-xs space-y-1">
-              <p className="font-bold text-stone-700 text-xs text-center">¡Prepara el lente inteligente!</p>
-              <p className="text-stone-400 text-[10px] leading-relaxed">
-                Carga una foto de tu plato u haz clic en un preset rápido para obtener el desglose automático de calorías, proteínas y carbohidratos.
+      {/* Persistent Scanned History List */}
+      {scannedHistory.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-4 animate-fade-in" id="scanned_history_section">
+          <div className="flex justify-between items-center border-b pb-3">
+            <div>
+              <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-[#5A7C56]" /> Historial de Escaneos de Hoy
+              </h3>
+              <p className="text-xs text-stone-400 font-bold mt-0.5">
+                Tus fotos y desgloses analizados localmente. Consérvalos o regístralos directo.
               </p>
             </div>
+            <span className="text-xs font-bold text-[#5A7C56] bg-[#EFF4EE] px-3 py-1 rounded-full border border-emerald-100">
+              {scannedHistory.length} escaneos
+            </span>
           </div>
-        )}
-      </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {scannedHistory.map((item: any) => {
+              const formattedTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              return (
+                <div key={item.id} className="border border-stone-250/60 rounded-xl overflow-hidden bg-[#FAF8F5] flex flex-col justify-between shadow-2xs hover:shadow-xs transition duration-200">
+                  <div className="p-4 space-y-3">
+                    <div className="flex gap-3">
+                      {/* Photo Thumbnail */}
+                      <div className="w-14 h-14 rounded-lg bg-stone-100 border border-stone-200 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {item.photoBase64 ? (
+                          <img src={item.photoBase64} alt={item.food_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-xl">🥗</span>
+                        )}
+                      </div>
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <span className="text-[8px] text-stone-400 font-black tracking-wider block uppercase">
+                          🕒 {formattedTime}
+                        </span>
+                        <h4 className="text-xs font-black text-stone-850 truncate" title={item.food_name}>
+                          {item.food_name}
+                        </h4>
+                        <div className="text-[11px] font-black text-[#5A7C56] font-mono">
+                          {item.total_calories} kcal
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Macros readout */}
+                    <div className="grid grid-cols-3 gap-1 text-center font-mono text-[9px] font-bold text-stone-600 bg-stone-100 p-1.5 rounded-lg">
+                      <div>P: {item.total_protein_g}g</div>
+                      <div>C: {item.total_carbs_g}g</div>
+                      <div>F: {item.total_fat_g}g</div>
+                    </div>
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="border-t border-stone-200/60 bg-stone-50/80 px-4 py-2 flex items-center justify-between">
+                    <button
+                      onClick={() => handleDeleteScannedItem && handleDeleteScannedItem(item.id)}
+                      className="text-stone-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg transition"
+                      title="Eliminar de historial"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+
+                    <div className="flex gap-1.5">
+                      <select 
+                        defaultValue="snack"
+                        id={`meal-select-${item.id}`}
+                        className="bg-white border text-[10px] font-bold rounded-lg px-1 py-0.5 focus:outline-hidden"
+                      >
+                        <option value="breakfast">🌅 Desayuno</option>
+                        <option value="lunch">☀️ Almuerzo</option>
+                        <option value="dinner">🌙 Cena</option>
+                        <option value="snack">🍎 Snack</option>
+                      </select>
+                      <button
+                        onClick={() => {
+                          const mealSelect = document.getElementById(`meal-select-${item.id}`) as HTMLSelectElement;
+                          const mealType = mealSelect ? mealSelect.value : 'snack';
+                          handleLogHistoricalItem && handleLogHistoricalItem(item, mealType);
+                        }}
+                        className="bg-[#5A7C56] hover:bg-[#4D6949] text-white px-2.5 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 transition"
+                        title="Registrar en la Bitácora"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Registrar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
