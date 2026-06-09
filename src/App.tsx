@@ -45,6 +45,7 @@ export default function App() {
   const [isStaticMode, setIsStaticMode] = useState<boolean>(() => {
     return localStorage.getItem('nutrisaas_is_static_mode') === 'true';
   });
+  const [scannerError, setScannerError] = useState<string | null>(null);
 
   // Active Tab/App View inside mobile device simulation
   const [mobileScreen, setMobileScreen] = useState<'home' | 'calculator' | 'scanner' | 'recipes' | 'db_explorer'>('home');
@@ -642,6 +643,7 @@ export default function App() {
   const handleApplyPresetPhoto = async (presetName: string) => {
     setScanningStatus("Escaneando plato e invocando IA de Nutrición (Gemini con visión)...");
     setAiAnalysisResult(null);
+    setScannerError(null);
 
     try {
       if (isStaticMode) {
@@ -687,9 +689,17 @@ export default function App() {
         setHiddenIngredientsForm(checklist);
         setScanningStatus(null);
       } else {
-        throw new Error('Server returned non-ok status');
+        let errorMsg = "Error al analizar la comida.";
+        try {
+          const errData = await res.json();
+          if (errData && errData.message) {
+            errorMsg = errData.message;
+          }
+        } catch (_) {}
+        throw new Error(errorMsg);
       }
-    } catch (_) {
+    } catch (err: any) {
+      setScannerError(err.message || "Error al conectar con el servidor para analizar el plato.");
       setScanningStatus("Usando base de datos analítica local (Modo Autónomo)...");
       setTimeout(() => {
         const analysis = getVisualAnalysisFallback(presetName);
@@ -749,6 +759,7 @@ export default function App() {
     if (!file) return;
 
     setScanningStatus("Leyendo bytes de imagen...");
+    setScannerError(null);
     const reader = new FileReader();
     reader.onloadend = async () => {
       const rawBase64 = reader.result as string;
@@ -803,21 +814,19 @@ export default function App() {
           setHiddenIngredientsForm(checklist);
           setScanningStatus(null);
         } else {
-          throw new Error('Analysis failed on server');
+          let errorMsg = "Error en el servidor al procesar la imagen.";
+          try {
+            const errData = await res.json();
+            if (errData && errData.message) {
+              errorMsg = errData.message;
+            }
+          } catch (_) {}
+          throw new Error(errorMsg);
         }
-      } catch (err) {
-        setScanningStatus("Usando base de datos analítica local (Modo Autónomo)...");
-        setTimeout(() => {
-          const analysis = getVisualAnalysisFallback(file.name);
-          setAiAnalysisResult(analysis);
-          setPortionMultiplier(1.0);
-          setHiddenIngredientsForm([
-            { name: "Aceite de cocina (para sofreír/plancha)", extra_calories: 120, checked: false },
-            { name: "Aderezo de ensaladas rico en grasas", extra_calories: 85, checked: false },
-            { name: "Margarina o mantequilla extra añadida", extra_calories: 110, checked: false },
-          ]);
-          setScanningStatus(null);
-        }, 800);
+      } catch (err: any) {
+        setScannerError(err.message || "Error al conectar con el servidor para procesar la imagen.");
+        setScanningStatus(null);
+        setAiAnalysisResult(null);
       }
     };
     reader.readAsDataURL(file);
@@ -1236,10 +1245,30 @@ export default function App() {
                 <span className="text-[10px] bg-[#EFF4EE] text-[#3D5C3A] font-black px-2.5 py-0.5 rounded-full border border-[#CDDCD0]">
                   Mi Nutrición Inteligente
                 </span>
-                {isStaticMode && (
-                  <span className="text-[10px] bg-[#E8F1FC] text-blue-700 font-extrabold px-2.5 py-0.5 rounded-full border border-blue-200 animate-pulse" title="Ejecutando en Modo Sandbox Local Storage (Vercel)">
-                    Modo Local Activo
-                  </span>
+                {isStaticMode ? (
+                  <button 
+                    onClick={() => {
+                      setIsStaticMode(false);
+                      localStorage.setItem('nutrisaas_is_static_mode', 'false');
+                      setScannerError(null);
+                    }}
+                    className="text-[10px] bg-amber-50 text-amber-700 hover:bg-amber-100 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-250 cursor-pointer transition flex items-center gap-1 shadow-3xs"
+                    title="Modo local forzado. Haz clic para cambiar a Modo Servidor (IA)."
+                  >
+                    ⚠️ Modo Local Activo (Cambiar a IA)
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setIsStaticMode(true);
+                      localStorage.setItem('nutrisaas_is_static_mode', 'true');
+                      setScannerError(null);
+                    }}
+                    className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-250 cursor-pointer transition flex items-center gap-1 shadow-3xs"
+                    title="Modo servidor activo con IA. Haz clic para cambiar a Modo Local (Sin Servidor)."
+                  >
+                    🟢 Modo IA Activo (Cambiar a Local)
+                  </button>
                 )}
               </div>
               <p className="text-[11px] text-stone-400 font-bold">Bitácora activa y planificador de precisión saludable</p>
@@ -1376,6 +1405,8 @@ export default function App() {
                 loggedMealType={loggedMealType}
                 setLoggedMealType={setLoggedMealType}
                 handleAddAnalyzedFoodToLog={handleAddAnalyzedFoodToLog}
+                scannerError={scannerError}
+                setScannerError={setScannerError}
               />
             )}
 

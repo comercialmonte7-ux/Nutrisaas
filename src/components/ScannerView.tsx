@@ -16,6 +16,8 @@ export interface ScannerViewProps {
   loggedMealType: string;
   setLoggedMealType: (val: any) => void;
   handleAddAnalyzedFoodToLog: () => void;
+  scannerError: string | null;
+  setScannerError: (val: string | null) => void;
 }
 
 export default function ScannerView({
@@ -31,7 +33,9 @@ export default function ScannerView({
   setHiddenIngredientsForm,
   loggedMealType,
   setLoggedMealType,
-  handleAddAnalyzedFoodToLog
+  handleAddAnalyzedFoodToLog,
+  scannerError,
+  setScannerError
 }: ScannerViewProps) {
   const [typedFoodDescription, setTypedFoodDescription] = useState("");
   const [isEditingResult, setIsEditingResult] = useState(false);
@@ -133,6 +137,40 @@ export default function ScannerView({
           </h3>
           <p className="text-xs text-stone-400 font-bold mt-0.5">Sube la foto de tu plato para desglosar sus macros</p>
         </div>
+
+        {scannerError && (
+          <div className="bg-rose-50 border border-rose-250 rounded-2xl p-4 text-stone-700 space-y-2.5 shadow-3xs animate-fade-in">
+            <div className="flex items-center gap-2 text-rose-800">
+              <span className="text-base">⚠️</span>
+              <strong className="font-extrabold text-stone-900">Error en Reconocimiento de Imagen</strong>
+            </div>
+            <p className="text-xs font-bold leading-relaxed text-stone-600">{scannerError}</p>
+            {(scannerError.includes("API_KEY") || scannerError.includes("api_key")) && (
+              <div className="bg-white/90 border border-rose-200/50 rounded-xl p-3.5 space-y-2">
+                <span className="text-[11px] font-black text-[#3D5C3A] uppercase tracking-wider block">🛠️ Guía de solución paso a paso:</span>
+                <ol className="list-decimal pl-4 space-y-1 text-[11px] leading-relaxed font-bold text-stone-600">
+                  <li>Inicia sesión en tu cuenta de <strong className="text-stone-900">Vercel</strong> y abre el proyecto de esta app.</li>
+                  <li>Ve a la pestaña de <strong className="text-stone-900">Settings</strong> e ingresa a <strong className="text-stone-900">Environment Variables</strong>.</li>
+                  <li>Agrega una nueva variable de entorno:
+                    <div className="my-1 text-[10px] bg-stone-100 p-1.5 rounded-lg border font-mono text-stone-900 select-all font-bold">
+                      Key: GEMINI_API_KEY
+                    </div>
+                  </li>
+                  <li>Pega el valor de tu clave API de Gemini y guarda.</li>
+                  <li>Redespliega el proyecto en Vercel para que los cambios se activen.</li>
+                </ol>
+              </div>
+            )}
+            <div className="flex justify-end pt-1">
+              <button 
+                onClick={() => setScannerError(null)}
+                className="bg-stone-900 hover:bg-stone-850 text-white px-3 py-1.5 rounded-xl text-[10px] font-black tracking-wider transition cursor-pointer"
+              >
+                Cerrar Aviso
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="relative w-full aspect-video bg-stone-100 rounded-xl overflow-hidden border flex flex-col justify-between p-4">
           <div className="absolute inset-4 pointer-events-none border border-dashed border-[#5A7C56]/30 rounded-lg"></div>

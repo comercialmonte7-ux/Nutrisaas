@@ -297,6 +297,14 @@ app.post('/api/analyze-food', async (req, res) => {
   const { imageBase64, mockFoodQuery, goal = "lose_weight" } = req.body;
   const client = getGeminiClient();
 
+  // If a real image was uploaded, we REQUIRE the Gemini Client
+  if (imageBase64 && !client) {
+    return res.status(400).json({
+      error: "api_key_missing",
+      message: "La clave API de Gemini (GEMINI_API_KEY) no está configurada en el servidor de Vercel. Por favor configúrala en las variables de entorno de tu proyecto para habilitar el escáner de fotos, o usa el 'Modo Local' en el Header para probar los presets estáticos de demostración."
+    });
+  }
+
   // If we have a working Gemini Client, execute live analysis!
   if (client) {
     try {
@@ -371,7 +379,7 @@ Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
         };
 
         response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: {
             parts: [imagePart, textPart]
           },
@@ -384,7 +392,7 @@ Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
       } else if (mockFoodQuery) {
         console.log(`Analyzing typed food description: "${mockFoodQuery}" with Gemini...`);
         response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: `Analiza detalladamente este plato o comida descrita por el usuario: "${mockFoodQuery}". Identifica los ingredientes básicos que lo componen típicamente en la gastronomía (especialmente chilena si aplica), estima gramos razonables, desglosa calorías, proteínas, carbohidratos, grasas por ingrediente y sugiere hasta 2 ingredientes ocultos comunes de su preparación.`,
           config: {
             systemInstruction: systemPrompt,
@@ -400,7 +408,14 @@ Retorna tu respuesta estrictamente en el formato de esquema JSON indicado.`;
         return res.json(parsedAns);
       }
     } catch (err: any) {
-      console.error("Gemini live food analysis failed, falling back to static preset database prediction:", err);
+      console.error("Gemini live food analysis failed:", err);
+      // If imageBase64 was provided, we throw a server error so it doesn't silently fallback to random food
+      if (imageBase64) {
+        return res.status(500).json({
+          error: "gemini_api_error",
+          message: `El reconocimiento por IA con visión falló: ${err.message || 'Error desconocido'}`
+        });
+      }
     }
   }
 
@@ -851,6 +866,9 @@ app.post('/api/database/raw-query', (req, res) => {
 
 // --- END OF MAIN API ROUTES ---
 
+// Export the app for serverless function use on Vercel
+export default app;
+
 // Vite Middleware & static handlers
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -872,4 +890,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  startServer();
+}
