@@ -158,8 +158,22 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
         profileData.picture = picture || profileData.picture;
       }
 
-      localProfiles[finalUserId] = profileData;
-      localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+      // Local-First: if the user already has a profile locally, don't overwrite it with stale server database data (which can get wiped on server resets on Vercel)
+      if (!localProfiles[finalUserId]) {
+        localProfiles[finalUserId] = profileData;
+        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+      } else {
+        // Local profile exists. Let's sync the local profile to the server!
+        const localProf = localProfiles[finalUserId];
+        fetch('/api/database/profile/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': finalUserId
+          },
+          body: JSON.stringify(localProf)
+        }).catch(err => console.log('Error syncing local profile to server on login:', err));
+      }
 
       // 3. Seed initial daily logs and sync with server
       const localLogsKey = 'nutrisaas_local_logs';

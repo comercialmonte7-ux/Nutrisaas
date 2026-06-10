@@ -515,8 +515,9 @@ export default function App() {
 
       // Pre-populate calculator fields
       if (activeProf) {
-        const birthDate = new Date(activeProf.date_of_birth);
-        const ageCalculated = new Date().getFullYear() - birthDate.getFullYear();
+        const birthYearStr = activeProf.date_of_birth ? activeProf.date_of_birth.split('-')[0] : '';
+        const birthYear = birthYearStr ? parseInt(birthYearStr, 10) : 1995;
+        const ageCalculated = new Date().getFullYear() - birthYear;
         const savedWearableCals = localStorage.getItem(`nutrisaas_wearable_active_cals_${activeUserId}`);
         const activeCalVal = savedWearableCals !== null ? Number(savedWearableCals) : 420;
 
