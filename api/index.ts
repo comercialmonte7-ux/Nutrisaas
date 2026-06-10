@@ -17,6 +17,11 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
+app.use(['/api/database/*', '/api/auth/*'], async (req, res, next) => {
+  await syncFromCloud();
+  next();
+});
+
 const PORT = 3000;
 
 // Initialize GoogleGenAI client (safe lazy lookup)
@@ -39,8 +44,40 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+const BUCKET_URL = 'https://kvdb.io/nutrisaas_prod_db_bucket_7e465f5dcc901d8d0baac1bf94300bc212685cc6';
+
+let simulatedScannedHistory: any = {};
+
+async function syncFromCloud() {
+  const globalFetch = (globalThis as any).fetch;
+  if (!globalFetch) return;
+  try {
+    const usersRes = await globalFetch(`${BUCKET_URL}/profiles`);
+    if (usersRes.ok) {
+      simulatedUsers = await usersRes.json();
+    }
+  } catch (e) {}
+
+  try {
+    const logsRes = await globalFetch(`${BUCKET_URL}/logs`);
+    if (logsRes.ok) {
+      simulatedDailyLogs = await logsRes.json();
+    }
+  } catch (e) {}
+
+  try {
+    const histRes = await globalFetch(`${BUCKET_URL}/scanned_history`);
+    if (histRes.ok) {
+      simulatedScannedHistory = await histRes.json();
+    }
+  } catch (e) {}
+}
+
 // Helper functions to read/write JSON files for local persistence
 function readLocalDbFile(filename: string, fallback: any) {
+  if (filename === 'scanned_history.json' && Object.keys(simulatedScannedHistory).length > 0) {
+    return simulatedScannedHistory;
+  }
   try {
     const filePath = path.join(process.cwd(), 'data', filename);
     if (fs.existsSync(filePath)) {
@@ -62,6 +99,17 @@ function writeLocalDbFile(filename: string, data: any) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (e) {
     console.log(`[Local DB] Warning: Failed to write local DB file ${filename}:`, e);
+  }
+
+  // Sync to remote cloud database bucket asynchronously
+  const key = filename.replace('.json', '');
+  const globalFetch = (globalThis as any).fetch;
+  if (globalFetch) {
+    globalFetch(`${BUCKET_URL}/${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).catch((e: any) => console.log(`[Cloud DB] Warning: Failed to sync ${key} to cloud:`, e));
   }
 }
 
@@ -167,7 +215,7 @@ const defaultDailyLogs: DailyLog[] = [
   }
 ];
 
-const simulatedUsers = readLocalDbFile('profiles.json', defaultUsers);
+let simulatedUsers = readLocalDbFile('profiles.json', defaultUsers);
 let simulatedDailyLogs: DailyLog[] = readLocalDbFile('logs.json', defaultDailyLogs);
 
 // --- API ROUTES FIRST ---
