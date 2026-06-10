@@ -319,7 +319,7 @@ export default function App() {
       const profiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
       const allLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const scannedHistory = JSON.parse(localStorage.getItem(scannedHistoryKey) || '[]');
-      const waterIntake = localStorage.getItem(waterIntakeKey) || '3';
+      const waterIntake = localStorage.getItem(waterIntakeKey) || '0';
       const fiberIntake = localStorage.getItem(fiberIntakeKey) || '10';
       const suppsState = JSON.parse(localStorage.getItem(suppsStateKey) || '{}');
 

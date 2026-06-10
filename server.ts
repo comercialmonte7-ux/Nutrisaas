@@ -44,50 +44,55 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-const appKey = 'i7hzycs6';
+// Cloud Database: jsonblob.com (free JSON storage with PUT body - no URL length limits)
+const BLOB_IDS = {
+  profiles: '019eb339-8fcf-7d17-816a-79770f922fc1',
+  logs: '019eb339-9588-7208-89a0-e0c8f4360b26',
+  scanned_history: '019eb339-985f-7af8-8eba-91fffc757f76'
+};
+const BLOB_BASE = 'https://jsonblob.com/api/jsonBlob';
+
 let simulatedScannedHistory: any = {};
 
 async function syncFromCloud() {
   const globalFetch = (globalThis as any).fetch;
   if (!globalFetch) return;
+
   try {
-    const usersRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/profiles`);
+    const usersRes = await globalFetch(`${BLOB_BASE}/${BLOB_IDS.profiles}`, {
+      headers: { 'Accept': 'application/json' }
+    });
     if (usersRes.ok) {
-      const val = await usersRes.json();
-      if (val && typeof val === 'string' && val.trim() !== '') {
-        const decoded = Buffer.from(val, 'base64url').toString('utf8');
-        if (decoded.trim() !== '') {
-          simulatedUsers = JSON.parse(decoded);
-        }
+      const data = await usersRes.json();
+      if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+        simulatedUsers = data;
       }
     }
-  } catch (e) {}
+  } catch (e) { console.log('[Cloud Sync] profiles read error:', e); }
 
   try {
-    const logsRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/logs`);
+    const logsRes = await globalFetch(`${BLOB_BASE}/${BLOB_IDS.logs}`, {
+      headers: { 'Accept': 'application/json' }
+    });
     if (logsRes.ok) {
-      const val = await logsRes.json();
-      if (val && typeof val === 'string' && val.trim() !== '') {
-        const decoded = Buffer.from(val, 'base64url').toString('utf8');
-        if (decoded.trim() !== '') {
-          simulatedDailyLogs = JSON.parse(decoded);
-        }
+      const data = await logsRes.json();
+      if (Array.isArray(data) && data.length > 0) {
+        simulatedDailyLogs = data;
       }
     }
-  } catch (e) {}
+  } catch (e) { console.log('[Cloud Sync] logs read error:', e); }
 
   try {
-    const histRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/scanned_history`);
+    const histRes = await globalFetch(`${BLOB_BASE}/${BLOB_IDS.scanned_history}`, {
+      headers: { 'Accept': 'application/json' }
+    });
     if (histRes.ok) {
-      const val = await histRes.json();
-      if (val && typeof val === 'string' && val.trim() !== '') {
-        const decoded = Buffer.from(val, 'base64url').toString('utf8');
-        if (decoded.trim() !== '') {
-          simulatedScannedHistory = JSON.parse(decoded);
-        }
+      const data = await histRes.json();
+      if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+        simulatedScannedHistory = data;
       }
     }
-  } catch (e) {}
+  } catch (e) { console.log('[Cloud Sync] scanned_history read error:', e); }
 }
 
 // Helper functions to read/write JSON files for local persistence
@@ -118,15 +123,15 @@ function writeLocalDbFile(filename: string, data: any) {
     console.log(`[Local DB] Warning: Failed to write local DB file ${filename}:`, e);
   }
 
-  // Sync to remote cloud database bucket asynchronously
-  const key = filename.replace('.json', '');
+  // Sync to jsonblob.com cloud database (data in HTTP body, no URL length limits)
+  const key = filename.replace('.json', '') as keyof typeof BLOB_IDS;
+  const blobId = BLOB_IDS[key];
   const globalFetch = (globalThis as any).fetch;
-  if (globalFetch) {
-    const payloadStr = JSON.stringify(data);
-    const base64urlVal = Buffer.from(payloadStr).toString('base64url');
-    globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${appKey}/${key}/${base64urlVal}`, {
-      method: 'POST',
-      headers: { 'Content-Length': '0' }
+  if (globalFetch && blobId) {
+    globalFetch(`${BLOB_BASE}/${blobId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(data)
     }).catch((e: any) => console.log(`[Cloud DB] Warning: Failed to sync ${key} to cloud:`, e));
   }
 }

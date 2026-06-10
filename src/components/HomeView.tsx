@@ -1404,6 +1404,14 @@ export default function HomeView({
                     <span className="bg-white px-2 py-0.5 rounded-md border border-stone-200 text-[#3D5C3A] font-bold uppercase overflow-hidden truncate max-w-[80px]">
                       {log.meal_type}
                     </span>
+                    {log.created_at && (
+                      <>
+                        <span>•</span>
+                        <span className="text-stone-400 italic">
+                          🕐 {new Date(log.created_at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </>
+                    )}
                     <span>•</span>
                     <span>Prot: <strong className="text-stone-700">{log.protein_g}g</strong></span>
                     <span>Carb: <strong className="text-stone-700">{log.carbs_g}g</strong></span>
