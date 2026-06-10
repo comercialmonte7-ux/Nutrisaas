@@ -26,11 +26,17 @@ import {
   Info,
   Check,
   Zap,
-  HelpCircle
+  HelpCircle,
+  Search,
+  Watch,
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { DailyLog } from '../types';
+import { CHILEAN_LA_FOODS, searchFoods } from '../foodDatabase';
 
 export interface HomeViewProps {
+  key?: any;
   activeProfile?: any;
   activeUserId: string;
   calcForm: any;
@@ -80,8 +86,13 @@ export default function HomeView({
 }: HomeViewProps) {
   
   // Quick calculations for metabolic expenditure
-  // Mifflin-St Jeor formula baseline estimation for Mari (68.5kg, 165cm, 32yo, female)
-  const bmrEstimate = Math.round(10 * calcForm.weight_kg + 6.25 * calcForm.height_cm - 5 * calcForm.age - 161);
+  // Mifflin-St Jeor formula baseline estimation dynamically adjusted by gender
+  const bmrEstimate = Math.round(
+    10 * calcForm.weight_kg +
+    6.25 * calcForm.height_cm -
+    5 * calcForm.age +
+    (calcForm.gender === 'male' ? 5 : -161)
+  );
   const activeDeviceCalories = calcForm.wearable_enabled ? calcForm.activeCaloriesToday : 0;
   
   // Total daily metabolic expenditure
@@ -99,6 +110,55 @@ export default function HomeView({
   const calDifference = budgetCalories - loggedTodayCalories;
 
   // --- NEW INTERACTIVE STATES ---
+
+  // Apple Watch / iPhone Health Sync States
+  const [showWatchModal, setShowWatchModal] = useState(false);
+  const [watchCalInput, setWatchCalInput] = useState<string>(String(calcForm.activeCaloriesToday || 0));
+  const [showBmrExplanation, setShowBmrExplanation] = useState(false);
+
+  // Easy Add Food states
+  const [activeFoodTab, setActiveFoodTab] = useState<'suggested' | 'search' | 'manual'>('suggested');
+  
+  // Manual Add Form states
+  const [manualFoodName, setManualFoodName] = useState('');
+  const [manualCalories, setManualCalories] = useState('');
+  const [manualProtein, setManualProtein] = useState('');
+  const [manualCarbs, setManualCarbs] = useState('');
+  const [manualFat, setManualFat] = useState('');
+  const [manualMealType, setManualMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast');
+  const [showManualMacros, setShowManualMacros] = useState(false);
+
+  // Search tab states
+  const [foodSearchQuery, setFoodSearchQuery] = useState('');
+  const [searchMealType, setSearchMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast');
+  const [searchPortionMultiplier, setSearchPortionMultiplier] = useState<number>(1.0);
+
+  // Selected suggested food for meal selection popup/dialog
+  const [selectedSuggestedFood, setSelectedSuggestedFood] = useState<{
+    name: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  } | null>(null);
+  const [suggestedMealType, setSuggestedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast');
+
+  // Triggered when saving the Apple Watch Active calories
+  const handleSaveWatchCalories = (e: React.FormEvent) => {
+    e.preventDefault();
+    const kcal = Math.max(0, Math.min(3000, Number(watchCalInput) || 0));
+    setCalcForm((prev: any) => {
+      const next = {
+        ...prev,
+        wearable_enabled: true,
+        activeCaloriesToday: kcal
+      };
+      // Save user-scoped wearable settings to localStorage
+      localStorage.setItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
+      return next;
+    });
+    setShowWatchModal(false);
+  };
   
   // 1. Fiber Intake Tracker for digestive support (Mari's girlfriend & user health focus)
   const [fiberIntake, setFiberIntake] = useState<number>(() => {
@@ -247,6 +307,76 @@ export default function HomeView({
     }
   };
 
+  // Dynamic physiological metabolic analysis (Apple Watch + Hydration)
+  const getMetabolicAnalysis = () => {
+    const activeCal = calcForm.activeCaloriesToday || 0;
+    const waterCups = waterIntake || 0;
+    
+    let trainingLevel: 'low' | 'medium' | 'high' = 'low';
+    if (activeCal > 500) trainingLevel = 'high';
+    else if (activeCal >= 200) trainingLevel = 'medium';
+
+    let hydrationLevel: 'low' | 'medium' | 'high' = 'low';
+    if (waterCups >= 8) hydrationLevel = 'high';
+    else if (waterCups >= 4) hydrationLevel = 'medium';
+
+    let statusTitle = "";
+    let statusDesc = "";
+    let nutritionalAdvice = "";
+    let healthColor = "bg-stone-50 text-stone-850 border-stone-200";
+
+    if (trainingLevel === 'high') {
+      if (hydrationLevel === 'low') {
+        statusTitle = "⚠️ Alerta Metabólica: Esfuerzo Alto + Deshidratación";
+        statusDesc = "Estás entrenando intensamente pero tu ingesta de agua es críticamente baja. Esto incrementa el riesgo de calambres musculares, fatiga precoz y sobrecarga renal.";
+        nutritionalAdvice = "¡URGENTE! Bebe 2 vasos de agua ahora. Para tu comida post-entrenamiento, consume alimentos ricos en agua y potasio (ej. Plátano maduro o kiwi chileno) con 25g de proteína magra. Evita comidas muy saladas o pesadas.";
+        healthColor = "bg-rose-50 text-rose-950 border-rose-250";
+      } else if (hydrationLevel === 'medium') {
+        statusTitle = "🏃 Entrenamiento Exigente: Hidratación Aceptable";
+        statusDesc = "Tu gasto calórico activo es alto. Vas por buen camino con la hidratación, pero necesitas más volumen para recuperar fluidos perdidos.";
+        nutritionalAdvice = "Agrega 1 o 2 vasos de agua en la próxima hora. Come carbohidratos de absorción moderada/rápida (ej. Arroz blanco o avena instantánea) y 30g de proteína (pechuga de pollo o huevos) para rellenar el glucógeno y reparar fibras.";
+        healthColor = "bg-amber-50 text-amber-950 border-amber-250";
+      } else {
+        statusTitle = "🌟 Ventana Anabólica Óptima: Rendimiento y Recuperación al Máximo";
+        statusDesc = "¡Excelente combinación! Has entrenado duro y mantienes tus células perfectamente hidratadas. La síntesis de proteína y la quema de grasa son altamente eficientes.";
+        nutritionalAdvice = "Consume una porción completa de carbohidratos complejos (arroz o avena) + proteína de alta calidad + grasas saludables (palta chilena) para consolidar tu recuperación celular.";
+        healthColor = "bg-emerald-50 text-emerald-950 border-emerald-250";
+      }
+    } else if (trainingLevel === 'medium') {
+      if (hydrationLevel === 'low') {
+        statusTitle = "💧 Hidratación Insuficiente para Actividad Moderada";
+        statusDesc = "Has realizado un gasto de actividad física medio, pero la falta de agua está reduciendo tu tasa metabólica basal y afectando tu concentración.";
+        nutritionalAdvice = "Bebe 1 vaso de agua inmediatamente. Elige snacks saludables de bajo residuo como un puñado de almendras naturales y una fruta acuosa (manzana).";
+        healthColor = "bg-rose-50 text-rose-950 border-rose-250";
+      } else if (hydrationLevel === 'medium') {
+        statusTitle = "🟢 Balance Estable: Gasto Moderado e Hidratación Regular";
+        statusDesc = "Te mantienes en una zona segura de balance energético y metabólico de nivel intermedio.";
+        nutritionalAdvice = "Mantén la ingesta regular de líquidos. Si tu meta es perder peso, una once ligera chilena (medio pan marraqueta con huevo o palta) cubrirá tus macros perfectamente.";
+        healthColor = "bg-emerald-50 text-emerald-950 border-emerald-205";
+      } else {
+        statusTitle = "💧 Superávit de Hidratación: Recuperación Confortable";
+        statusDesc = "Excelente hidratación celular para el nivel de ejercicio moderado realizado hoy. Tu cuerpo elimina toxinas eficazmente.";
+        nutritionalAdvice = "Mantén el ritmo. No necesitas excesos de comida rápida. Un plato de porotos con riendas o una empanada de pino casera moderada encajará bien si estás en mantenimiento.";
+        healthColor = "bg-sky-50 text-sky-950 border-sky-205";
+      }
+    } else {
+      // low training
+      if (hydrationLevel === 'low') {
+        statusTitle = "⚠️ Sedentarismo con Deshidratación";
+        statusDesc = "Hoy has tenido muy poco movimiento y no estás consumiendo suficiente agua. Tu digestión y metabolismo se ralentizarán notablemente.";
+        nutritionalAdvice = "Toma agua tibia para estimular el tránsito intestinal. Agrega alimentos prebióticos altos en fibra (como ciruelas pasas o avena con linaza) en tu próxima colación para apoyar tu digestión.";
+        healthColor = "bg-amber-50 text-amber-950 border-amber-205";
+      } else {
+        statusTitle = "🧘 Día de Recuperación / Descanso Activo";
+        statusDesc = "Hoy tu gasto por entrenamiento es bajo y tu nivel de hidratación es óptimo. Es un día ideal para depurar el organismo y desinflamar fibras musculares.";
+        nutritionalAdvice = "Reduce la porción de carbohidratos de hoy para evitar acumular grasa. Prioriza ensaladas de hojas verdes con aceite de oliva, proteínas magras y tu suplementación de Magnesio nocturna.";
+        healthColor = "bg-stone-50 text-stone-900 border-stone-200";
+      }
+    }
+
+    return { statusTitle, statusDesc, nutritionalAdvice, healthColor };
+  };
+
   const advice = getPersonalizedAdvice();
 
    const activeUserName = activeProfile ? activeProfile.first_name : "Ricardo";
@@ -274,7 +404,7 @@ export default function HomeView({
             </span>
             <span className="text-stone-300">|</span>
             <span className="flex items-center gap-1">
-              <User className="h-3.5 w-3.5 text-[#5A7C56]" /> Goal: {calcForm.goal === 'lose_weight' ? 'Déficit (Pérdida)' : calcForm.goal === 'gain_muscle' ? 'Superávit (Músculo)' : 'Mantenimiento'}
+              <User className="h-3.5 w-3.5 text-[#5A7C56]" /> Meta: {calcForm.goal === 'lose_weight' ? 'Déficit (Pérdida)' : calcForm.goal === 'gain_muscle' ? 'Superávit (Músculo)' : 'Mantenimiento'}
             </span>
           </div>
         </div>
@@ -310,30 +440,66 @@ export default function HomeView({
           </div>
 
           {/* B. Cuánto he gastado (Gasto metabólico estimado) */}
-          <div className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4.5 flex flex-col justify-between space-y-3">
+          <div className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4.5 flex flex-col justify-between space-y-3 relative">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black text-stone-600 flex items-center gap-1.5 uppercase tracking-wider">
                 <Flame className="h-4 w-4 text-amber-600" /> He Gastado
               </span>
-              {calcForm.wearable_enabled && (
-                <span className="text-[9px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
-                  Wearable Activo
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => setShowBmrExplanation(prev => !prev)}
+                  className="text-stone-400 hover:text-[#5A7C56] transition cursor-pointer p-0.5"
+                  title="Ver desglose del cálculo calórico"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+                {calcForm.wearable_enabled && (
+                  <span className="text-[9px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-205">
+                    Watch Activo
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            {showBmrExplanation ? (
+              <div className="text-[9px] bg-white border border-stone-150 p-2.5 rounded-xl text-stone-605 leading-normal space-y-1">
+                <div className="flex justify-between items-center border-b border-stone-100 pb-1">
+                  <span className="font-extrabold text-stone-850">Fórmula Mifflin-St Jeor</span>
+                  <button onClick={() => setShowBmrExplanation(false)} className="text-[8px] text-stone-400 font-bold hover:underline">cerrar</button>
+                </div>
+                <div><strong>Basal (BMR):</strong> 10xPeso + 6.25xAltura - 5xEdad {calcForm.gender === 'male' ? '+ 5' : '- 161'} = <strong className="text-stone-850">{bmrEstimate} kcal</strong></div>
+                <div><strong>Activo Diario:</strong> BMR x {coef} ({calcForm.activity_level === 'sedentary' ? 'Sedentario' : calcForm.activity_level === 'lightly_active' ? 'Ligero' : 'Moderado'}) = <strong className="text-stone-850">{tdeeEstimateWithoutBonus} kcal</strong></div>
+                {calcForm.wearable_enabled && <div><strong>Apple Watch:</strong> +{activeDeviceCalories} kcal</div>}
+                <div className="border-t border-stone-100 pt-1 font-black text-stone-850 text-right">Gasto Total: {totalCaloriesExpended} kcal</div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-3xl font-black text-stone-900 font-mono">
+                  {totalCaloriesExpended} <span className="text-sm font-bold text-stone-500">kcal</span>
+                </p>
+                <p className="text-[10px] text-stone-500 font-bold mt-1 leading-relaxed">
+                  Tasa basal ({bmrEstimate} kcal) + {activeDeviceCalories} {calcForm.deviceName}
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1.5 mt-1">
+              <div className="text-[9px] text-stone-550 font-bold bg-white px-2 py-1 rounded-lg border border-stone-150 flex items-center justify-between">
+                <span>Nivel actividad:</span>
+                <span className="font-black text-[#5A7C56]">
+                  {calcForm.activity_level === 'sedentary' ? 'Sedentario' : calcForm.activity_level === 'lightly_active' ? 'Ligero' : 'Moderado'}
                 </span>
-              )}
-            </div>
-            <div>
-              <p className="text-3xl font-black text-stone-900 font-mono">
-                {totalCaloriesExpended} <span className="text-sm font-bold text-stone-500">kcal</span>
-              </p>
-              <p className="text-[10px] text-stone-500 font-bold mt-1 leading-relaxed">
-                Tasa basal ({bmrEstimate} kcal) + {activeDeviceCalories} {calcForm.deviceName}
-              </p>
-            </div>
-            <div className="text-[10px] text-stone-500 font-medium bg-white px-2 py-1.5 rounded-lg border border-stone-150 flex items-center justify-between">
-              <span>Nivel actividad:</span>
-              <span className="font-bold text-[#5A7C56]">
-                {calcForm.activity_level === 'sedentary' ? 'Sedentario' : calcForm.activity_level === 'lightly_active' ? 'Ligero' : 'Moderado'}
-              </span>
+              </div>
+              
+              <button 
+                onClick={() => {
+                  setWatchCalInput(String(calcForm.activeCaloriesToday || 0));
+                  setShowWatchModal(true);
+                }}
+                className="w-full py-1.5 bg-white hover:bg-stone-50 border border-stone-250 hover:border-[#5A7C56] text-[#3D5C3A] font-extrabold rounded-xl text-[10px] transition flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
+              >
+                <span className="text-stone-900 font-extrabold"></span> Sincronizar Apple Watch
+              </button>
             </div>
           </div>
 
@@ -375,47 +541,499 @@ export default function HomeView({
 
         </div>
 
-        {/* 2. PLAN DE ACCIÓN PERSONALIZADO PARA EMPAREJAR TU OBJETIVO */}
-        <div className="border-t border-stone-150 pt-5 text-left">
-          <div className="bg-gradient-to-br from-[#EFF4EE] to-white rounded-2xl border border-[#CDDCD0] p-4.5 space-y-3 shadow-3xs" id="personalized_goal_match">
+        {/* Dynamic precision physiological advice engine */}
+        {(() => {
+          const analysis = getMetabolicAnalysis();
+          return (
+            <div className={`rounded-2xl border-2 border-dashed p-4 text-left ${analysis.healthColor} shadow-3xs space-y-2`} id="precision_metabolic_coaching">
+              <div className="flex items-center gap-2 border-b border-stone-200/50 pb-2">
+                <div className="p-1.5 bg-white rounded-lg border border-stone-200">
+                  <Activity className="h-4 w-4 text-[#5A7C56]" />
+                </div>
+                <h4 className="text-xs font-black uppercase tracking-wider">
+                  Recomendador Metabólico de Precisión (Watch + Hidratación)
+                </h4>
+              </div>
+              <div className="space-y-1">
+                <h5 className="text-xs font-black flex items-center gap-1">{analysis.statusTitle}</h5>
+                <p className="text-[11px] leading-relaxed font-semibold opacity-90">{analysis.statusDesc}</p>
+                <div className="bg-white/95 p-3 rounded-xl border border-stone-200/40 text-[11px] leading-relaxed mt-2 text-stone-850">
+                  <span className="font-extrabold block text-[#3D5C3A] mb-0.5">💡 Recomendación para comer y entrenar hoy:</span>
+                  {analysis.nutritionalAdvice}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Original plan advice fallback widget */}
+        <div className="border-t border-stone-150 pt-4 text-left">
+          <div className="bg-gradient-to-br from-[#EFF4EE]/45 to-white rounded-2xl border border-[#CDDCD0]/60 p-4 space-y-3" id="personalized_goal_match">
             <div className="flex items-center justify-between gap-4">
               <h4 className="text-xs font-black text-[#3D5C3A] uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-[#5A7C56]" /> 
-                ¿Qué hacer ahora para cumplir mi objetivo?
+                Objetivo Semanal
               </h4>
-              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${advice.badgeColor}`}>
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${advice.badgeColor}`}>
                 {advice.status}
               </span>
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-1">
               <p className="text-xs font-extrabold text-stone-850 flex items-center gap-1.5">
-                {calcForm.goal === 'lose_weight' ? <TrendingDown className="h-4 w-4 text-[#5A7C56]" /> : <TrendingUp className="h-4 w-4 text-emerald-600" />}
-                Plan Clínico Activo: {advice.title}
+                {calcForm.goal === 'lose_weight' ? <TrendingDown className="h-3.5 w-3.5 text-[#5A7C56]" /> : <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />}
+                Meta de Caloric Target: {advice.title}
               </p>
-              <p className="text-xs text-stone-600 leading-relaxed font-semibold">
+              <p className="text-[11px] text-stone-600 leading-relaxed font-semibold">
                 {advice.text}
               </p>
-            </div>
-
-            {/* Quick Actions triggers */}
-            <div className="pt-2 border-t border-[#CDDCD0]/40 flex flex-wrap gap-2 text-xs">
-              <button 
-                onClick={() => setMobileScreen('scanner')}
-                className="bg-[#5A7C56] hover:bg-[#3D5C3A] text-white font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1 cursor-pointer shadow-3xs hover:shadow-2xs"
-              >
-                Escanear Plato con IA <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-              <button 
-                onClick={() => setMobileScreen('db_explorer')}
-                className="bg-white hover:bg-stone-50 text-stone-650 border border-stone-250 font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1 cursor-pointer shadow-3xs"
-              >
-                Buscar Alimento Técnico
-              </button>
             </div>
           </div>
         </div>
 
+      </div>
+
+      {/* --- Apple Watch Sync Modal Overlay --- */}
+      {showWatchModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl border border-[#CDDCD0] shadow-2xl p-6 sm:p-8 max-w-lg w-full relative space-y-6">
+            <button 
+              onClick={() => setShowWatchModal(false)}
+              className="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1.5 hover:bg-stone-100 rounded-full transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="space-y-2 text-center sm:text-left">
+              <div className="inline-flex p-3 bg-[#EFF4EE] rounded-2xl text-[#3D5C3A]">
+                <Watch className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-black text-stone-900 tracking-tight">
+                 Sincronización Real con Apple Watch & Health
+              </h3>
+              <p className="text-xs text-stone-500 font-medium leading-relaxed">
+                Las aplicaciones web en iOS no pueden acceder de fondo a tu base de datos privada de HealthKit. 
+                Puedes registrar tu actividad física de dos maneras sencillas:
+              </p>
+            </div>
+
+            {/* Option 1: Manual Input / Sync */}
+            <form onSubmit={handleSaveWatchCalories} className="bg-[#FAF8F5] border border-stone-200 rounded-2xl p-4.5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-[#3D5C3A] uppercase tracking-wider block">
+                  Calorías Activas de Hoy (Apple Watch):
+                </label>
+                <p className="text-[10px] text-stone-400 font-semibold leading-tight">
+                  Ingresa las "Calorías Activas" registradas hoy en los anillos de tu reloj o en la app Salud de tu iPhone.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input 
+                  type="number"
+                  value={watchCalInput}
+                  onChange={(e) => setWatchCalInput(e.target.value)}
+                  className="w-24 px-3 py-2 bg-white border border-stone-250 rounded-xl text-sm font-mono font-black text-stone-900 text-center focus:outline-hidden focus:border-[#5A7C56]"
+                  placeholder="e.g. 500"
+                  min="0"
+                  max="3000"
+                  required
+                />
+                <span className="text-xs font-bold text-stone-500">kcal</span>
+
+                <input 
+                  type="range"
+                  min="0"
+                  max="1500"
+                  step="20"
+                  value={Number(watchCalInput) || 0}
+                  onChange={(e) => setWatchCalInput(e.target.value)}
+                  className="flex-1 accent-[#5A7C56] h-1.5 bg-stone-250 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-[#5A7C56] hover:bg-[#3D5C3A] text-white font-black py-2.5 rounded-xl text-xs transition shadow-3xs cursor-pointer"
+              >
+                Guardar Sincronización
+              </button>
+            </form>
+
+            {/* Option 2: Automated Shortcut Guide */}
+            <div className="border border-stone-150 rounded-2xl p-4.5 space-y-3">
+              <h4 className="text-xs font-black text-stone-850 flex items-center gap-1.5">
+                <Zap className="h-4 w-4 text-amber-500" /> Sincronización Automática con iOS Shortcuts
+              </h4>
+              <p className="text-[10px] text-stone-500 font-medium leading-relaxed">
+                Puedes configurar un atajo en tu iPhone para que tu Apple Watch actualice esta página con un solo toque:
+              </p>
+              <ol className="list-decimal list-inside text-[10px] text-stone-600 font-semibold space-y-1.5 pl-1 leading-normal">
+                <li>Abre la app **Atajos (Shortcuts)** integrada en tu iPhone.</li>
+                <li>Crea un atajo nuevo llamado **"Sincronizar NutriSaaS"**.</li>
+                <li>Agrega la acción **"Buscar muestras de Salud"** (Filtrar por Energía Activa, fecha de inicio es Hoy).</li>
+                <li>Agrega la acción **"Obtener URL"** con: <code className="bg-stone-105 px-1 py-0.5 rounded text-stone-800 font-mono text-[9px] break-all select-all select-text">http://localhost:3000?active_cals=[Valor de Salud]</code></li>
+                <li>Agrega la acción **"Abrir URL"** (Selecciona Safari u otro navegador).</li>
+              </ol>
+              <p className="text-[9px] text-[#3D5C3A] font-black">
+                💡 Al presionar el atajo, el iPhone leerá tu reloj e inyectará de inmediato tus calorías activas en NutriSaaS.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- QUICK FOOD ADD PANEL --- */}
+      <div className="bg-white rounded-3xl border border-[#CDDCD0] p-6 sm:p-8 space-y-6" id="quick_food_adder_card">
+        <div className="flex items-center gap-2.5 border-b border-[#EFF4EE] pb-3">
+          <div className="p-2 bg-gradient-to-br from-[#5A7C56] to-[#3D5C3A] rounded-2xl text-white shadow-xs">
+            <Utensils className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-stone-900">Registrar Alimentos Hoy</h3>
+            <p className="text-[10px] text-stone-400 font-bold">Agrega tus comidas de forma rápida y sencilla</p>
+          </div>
+        </div>
+
+        {/* Tab Selectors */}
+        <div className="flex gap-2 p-1 bg-stone-100 rounded-xl border border-stone-200 text-xs font-bold text-stone-600">
+          <button 
+            onClick={() => setActiveFoodTab('suggested')}
+            className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer ${activeFoodTab === 'suggested' ? 'bg-white text-stone-900 shadow-3xs font-black' : 'hover:bg-stone-50'}`}
+          >
+            ⭐ Favoritos Chilenos
+          </button>
+          <button 
+            onClick={() => setActiveFoodTab('search')}
+            className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer ${activeFoodTab === 'search' ? 'bg-white text-stone-900 shadow-3xs font-black' : 'hover:bg-stone-50'}`}
+          >
+            🔍 Buscar
+          </button>
+          <button 
+            onClick={() => setActiveFoodTab('manual')}
+            className={`flex-1 py-1.5 rounded-lg transition-colors cursor-pointer ${activeFoodTab === 'manual' ? 'bg-white text-stone-900 shadow-3xs font-black' : 'hover:bg-stone-50'}`}
+          >
+            ✍️ Manual Rápido
+          </button>
+        </div>
+
+        {/* Tab Content 1: Suggested / Favorites */}
+        {activeFoodTab === 'suggested' && (
+          <div className="space-y-4">
+            <p className="text-[10px] text-stone-500 font-bold">Haz clic en cualquier alimento para agregarlo en un segundo:</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { name: "Marraqueta (Pan Batido)", cal: 270, prot: 8.5, carb: 56, fat: 1, label: "🥖 100g Marraqueta" },
+                { name: "Palta Hass Chilena", cal: 160, prot: 2, carb: 9, fat: 15, label: "🥑 100g Palta" },
+                { name: "Huevo Cocido Entero", cal: 78, prot: 6.5, carb: 0.6, fat: 5.5, label: "🥚 1 Huevo Cocido" },
+                { name: "Pechuga de Pollo", cal: 248, prot: 46.5, carb: 0, fat: 5.4, label: "🐔 150g Pechuga Pollo" },
+                { name: "Arroz Blanco Cocido", cal: 195, prot: 4, carb: 42, fat: 0.5, label: "🍚 150g Arroz Blanco" },
+                { name: "Plátano Maduro", cal: 107, prot: 1.3, carb: 27.6, fat: 0.4, label: "🍌 1 Plátano Mediano" },
+                { name: "Leche Semidescremada", cal: 90, prot: 6.4, carb: 9.6, fat: 3, label: "🥛 1 Vaso Leche (200ml)" },
+                { name: "Manzana Chilena", cal: 78, prot: 0.4, carb: 21, fat: 0.3, label: "🍎 1 Manzana Mediana" }
+              ].map(f => (
+                <button
+                  key={f.name}
+                  onClick={() => {
+                    const hr = new Date().getHours();
+                    let guessedType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'snack';
+                    if (hr < 11) guessedType = 'breakfast';
+                    else if (hr >= 11 && hr < 16) guessedType = 'lunch';
+                    else if (hr >= 19 && hr < 23) guessedType = 'dinner';
+                    
+                    setSelectedSuggestedFood(f);
+                    setSuggestedMealType(guessedType);
+                  }}
+                  className="p-3 bg-[#FAF8F5] hover:bg-[#EFF4EE] border border-stone-200 hover:border-[#CDDCD0] rounded-2xl text-left transition flex flex-col justify-between h-20 cursor-pointer shadow-3xs"
+                >
+                  <span className="text-[11px] font-black text-stone-850 line-clamp-2 leading-tight">{f.label}</span>
+                  <span className="text-[10px] text-stone-500 font-mono font-bold mt-1">{f.cal} kcal</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Food suggested meal selector inline popup */}
+            {selectedSuggestedFood && (
+              <div className="bg-stone-50 border border-[#CDDCD0] p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+                <div className="text-xs text-stone-700">
+                  ¿Registrar <strong className="text-stone-900">{selectedSuggestedFood.name}</strong> ({selectedSuggestedFood.cal} kcal) como qué comida del día?
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { type: 'breakfast', label: '🌅 Desayuno' },
+                    { type: 'lunch', label: '☀️ Almuerzo' },
+                    { type: 'dinner', label: '🌙 Cena' },
+                    { type: 'snack', label: '🍎 Colación' }
+                  ].map(m => (
+                    <button
+                      key={m.type}
+                      onClick={() => {
+                        if (handleQuickLogFood) {
+                          handleQuickLogFood(
+                            selectedSuggestedFood.name,
+                            selectedSuggestedFood.cal,
+                            selectedSuggestedFood.prot,
+                            selectedSuggestedFood.carb,
+                            selectedSuggestedFood.fat,
+                            m.type as any
+                          );
+                        }
+                        setSelectedSuggestedFood(null);
+                      }}
+                      className={`px-3 py-1.5 border rounded-xl text-xs font-bold transition cursor-pointer ${
+                        suggestedMealType === m.type 
+                          ? 'bg-[#5A7C56] border-[#3D5C3A] text-white' 
+                          : 'bg-white border-stone-250 text-stone-700 hover:bg-stone-50'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                  <button 
+                    onClick={() => setSelectedSuggestedFood(null)} 
+                    className="px-3 py-1.5 text-xs font-black text-rose-600 hover:underline cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content 2: Search */}
+        {activeFoodTab === 'search' && (
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Ej: Palta, Marraqueta, Pollo..."
+                value={foodSearchQuery}
+                onChange={(e) => setFoodSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-250 rounded-xl text-xs font-bold text-stone-900 focus:bg-white focus:outline-hidden focus:border-[#5A7C56] transition"
+              />
+            </div>
+
+            {foodSearchQuery.trim() ? (
+              <div className="space-y-3">
+                <p className="text-[10px] text-stone-500 font-bold">Resultados en la Base de Datos Chilena:</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {(() => {
+                    const results = searchFoods(foodSearchQuery);
+                    if (results.length === 0) {
+                      return <p className="text-xs text-stone-400 font-semibold italic">No se encontraron alimentos. Intenta con palabras clave como 'Palta', 'Pan', 'Huevo'.</p>;
+                    }
+                    return results.map(f => (
+                      <div key={f.id} className="p-3 bg-[#FAF8F5] border border-stone-200 rounded-xl flex items-center justify-between gap-4">
+                        <div className="text-xs flex-1 min-w-0">
+                          <strong className="text-stone-850 block truncate">{f.name}</strong>
+                          <span className="text-[10px] text-stone-500 font-bold block">{f.brand || 'INTA Chile'} • 100g</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs font-bold">
+                          <div className="text-right">
+                             <span className="font-black font-mono text-stone-900">{f.calories_100g}</span>
+                             <span className="text-[9px] text-stone-400 block font-bold">kcal</span>
+                          </div>
+                          
+                          {/* Portion multiplier and meal type */}
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={searchMealType}
+                              onChange={(e) => setSearchMealType(e.target.value as any)}
+                              className="bg-white border border-stone-250 rounded-lg text-[10px] font-black text-stone-700 px-1 py-0.5 focus:outline-hidden"
+                            >
+                              <option value="breakfast">🌅 Desayuno</option>
+                              <option value="lunch">☀️ Almuerzo</option>
+                              <option value="dinner">🌙 Cena</option>
+                              <option value="snack">🍎 Colación</option>
+                            </select>
+                            
+                            <button
+                              onClick={() => {
+                                if (handleQuickLogFood) {
+                                  handleQuickLogFood(
+                                    f.name,
+                                    Math.round(f.calories_100g * searchPortionMultiplier),
+                                    Math.round(f.protein_100g * searchPortionMultiplier),
+                                    Math.round(f.carbs_100g * searchPortionMultiplier),
+                                    Math.round(f.fat_100g * searchPortionMultiplier),
+                                    searchMealType
+                                  );
+                                }
+                                setFoodSearchQuery('');
+                              }}
+                              className="bg-[#5A7C56] hover:bg-[#3D5C3A] text-white text-[10px] font-black px-3 py-1 rounded-lg transition cursor-pointer flex items-center gap-0.5"
+                            >
+                              <Plus className="h-3 w-3" /> Registrar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center border-2 border-dashed border-stone-200/80 rounded-2xl text-xs text-stone-400 italic font-semibold leading-relaxed">
+                Escribe arriba para buscar ingredientes chilenos con macros y calorías clínicamente validados.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab Content 3: Manual Add */}
+        {activeFoodTab === 'manual' && (
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!manualFoodName.trim() || !manualCalories.trim()) return;
+              if (handleQuickLogFood) {
+                handleQuickLogFood(
+                  manualFoodName.trim(),
+                  Number(manualCalories) || 0,
+                  Number(manualProtein) || 0,
+                  Number(manualCarbs) || 0,
+                  Number(manualFat) || 0,
+                  manualMealType
+                );
+              }
+              // Reset form
+              setManualFoodName('');
+              setManualCalories('');
+              setManualProtein('');
+              setManualCarbs('');
+              setManualFat('');
+            }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-[10px] font-black text-stone-500 uppercase tracking-widest block">Nombre del alimento:</label>
+                <input
+                  type="text"
+                  value={manualFoodName}
+                  onChange={(e) => setManualFoodName(e.target.value)}
+                  placeholder="Ej: Plato de Lasaña, Sándwich con queso..."
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-250 rounded-xl font-bold text-stone-900 focus:bg-white focus:outline-hidden focus:border-[#5A7C56] transition"
+                  required
+                />
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-stone-500 uppercase tracking-widest block text-center">Calorías (kcal):</label>
+                <input
+                  type="number"
+                  value={manualCalories}
+                  onChange={(e) => setManualCalories(e.target.value)}
+                  placeholder="Ej: 350"
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-250 rounded-xl font-mono font-bold text-stone-900 focus:bg-white focus:outline-hidden focus:border-[#5A7C56] transition text-center"
+                  min="0"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Macros inputs hidden toggle */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowManualMacros(prev => !prev)}
+                className="text-[10px] text-[#5A7C56] hover:text-[#3D5C3A] font-extrabold flex items-center gap-1 cursor-pointer"
+              >
+                <span>{showManualMacros ? '▼ Ocultar' : '▶ Añadir'} Macronutrientes (Proteínas, Carbohidratos, Grasas)</span>
+              </button>
+            </div>
+
+            {showManualMacros && (
+              <div className="grid grid-cols-3 gap-3 text-xs animate-fade-in">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-stone-500 uppercase tracking-widest block text-center">Proteínas (g):</label>
+                  <input
+                    type="number"
+                    value={manualProtein}
+                    onChange={(e) => setManualProtein(e.target.value)}
+                    placeholder="g"
+                    className="w-full px-2 py-2 bg-stone-50 border border-stone-250 rounded-xl font-mono text-stone-900 text-center"
+                    min="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-stone-500 uppercase tracking-widest block text-center">Carb (g):</label>
+                  <input
+                    type="number"
+                    value={manualCarbs}
+                    onChange={(e) => setManualCarbs(e.target.value)}
+                    placeholder="g"
+                    className="w-full px-2 py-2 bg-stone-50 border border-stone-250 rounded-xl font-mono text-stone-900 text-center"
+                    min="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-stone-500 uppercase tracking-widest block text-center">Grasas (g):</label>
+                  <input
+                    type="number"
+                    value={manualFat}
+                    onChange={(e) => setManualFat(e.target.value)}
+                    placeholder="g"
+                    className="w-full px-2 py-2 bg-stone-50 border border-stone-250 rounded-xl font-mono text-stone-900 text-center"
+                    min="0"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
+                <span>Tipo de Comida:</span>
+                <div className="flex gap-1.5">
+                  {[
+                    { type: 'breakfast', label: '🌅 Desayuno' },
+                    { type: 'lunch', label: '☀️ Almuerzo' },
+                    { type: 'dinner', label: '🌙 Cena' },
+                    { type: 'snack', label: '🍎 Colación' }
+                  ].map(m => (
+                    <button
+                      key={m.type}
+                      type="button"
+                      onClick={() => setManualMealType(m.type as any)}
+                      className={`px-2.5 py-1 border rounded-lg text-[10px] transition cursor-pointer ${
+                        manualMealType === m.type 
+                          ? 'bg-[#5A7C56] border-[#3D5C3A] text-white font-extrabold' 
+                          : 'bg-white border-stone-200 hover:bg-stone-50'
+                      }`}
+                    >
+                      {m.label.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="bg-[#5A7C56] hover:bg-[#3D5C3A] text-white font-black px-5 py-2.5 rounded-xl text-xs transition shadow-3xs flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" /> Registrar Comida
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* fallback actions */}
+      <div className="flex flex-wrap gap-2 text-xs">
+        <button 
+          onClick={() => setMobileScreen('scanner')}
+          className="bg-[#5A7C56] hover:bg-[#3D5C3A] text-white font-black px-3.5 py-2 rounded-xl transition flex items-center gap-1 cursor-pointer shadow-3xs hover:shadow-2xs"
+        >
+          Escanear Plato con IA <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <button 
+          onClick={() => setMobileScreen('db_explorer')}
+          className="bg-white hover:bg-stone-55 text-stone-650 border border-stone-250 font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1 cursor-pointer shadow-3xs"
+        >
+          Buscar Alimento Técnico
+        </button>
       </div>
 
       {/* --- NEW SECTION: BENTO BOX LIFESTYLE INTEGRATION (Fiber, Bus Trips, Supplements) --- */}

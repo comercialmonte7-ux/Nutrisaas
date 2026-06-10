@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Apple,
   Camera,
@@ -50,17 +50,30 @@ export default function App() {
 
   // Interactive Hydration state managed with local storage
   const [waterIntake, setWaterIntake] = useState<number>(() => {
-    const saved = localStorage.getItem('nutrisaas_water_intake');
+    const activeId = localStorage.getItem('nutrisaas_active_user_id');
+    const key = activeId ? `nutrisaas_water_intake_${activeId}` : 'nutrisaas_water_intake';
+    const saved = localStorage.getItem(key);
     return saved ? Number(saved) : 3;
   });
 
   const handleModifyWater = (amount: number) => {
     setWaterIntake(prev => {
       const next = Math.max(0, Math.min(12, prev + amount));
-      localStorage.setItem('nutrisaas_water_intake', String(next));
+      const key = activeUserId ? `nutrisaas_water_intake_${activeUserId}` : 'nutrisaas_water_intake';
+      localStorage.setItem(key, String(next));
       return next;
     });
   };
+
+  // Sync water intake when active user changes
+  useEffect(() => {
+    if (activeUserId) {
+      const saved = localStorage.getItem(`nutrisaas_water_intake_${activeUserId}`);
+      setWaterIntake(saved ? Number(saved) : 3);
+    } else {
+      setWaterIntake(3);
+    }
+  }, [activeUserId]);
 
   // MÓDULO 1: Scientific Calculator interactive parameters
   const [calcForm, setCalcForm] = useState({
@@ -96,14 +109,20 @@ export default function App() {
   const [barcodeSearchQuery, setBarcodeSearchQuery] = useState("");
 
   // Persistent Scanned History State
-  const [scannedHistory, setScannedHistory] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('nutrisaas_scanned_history');
-      return saved ? JSON.parse(saved) : [];
-    } catch (_) {
-      return [];
+  const [scannedHistory, setScannedHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeUserId) {
+      try {
+        const saved = localStorage.getItem(`nutrisaas_scanned_history_${activeUserId}`);
+        setScannedHistory(saved ? JSON.parse(saved) : []);
+      } catch (_) {
+        setScannedHistory([]);
+      }
+    } else {
+      setScannedHistory([]);
     }
-  });
+  }, [activeUserId]);
 
   const addToScannedHistory = (data: VisualFoodAnalysis, photoBase64: string | null) => {
     const historyItem = {
@@ -121,7 +140,21 @@ export default function App() {
 
     setScannedHistory(prev => {
       const updated = [historyItem, ...prev].slice(0, 15); // limit to 15 items
-      localStorage.setItem('nutrisaas_scanned_history', JSON.stringify(updated));
+      const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
+      localStorage.setItem(key, JSON.stringify(updated));
+
+      // Sync updated history to server database
+      if (activeUserId) {
+        fetch('/api/database/scanned_history/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': activeUserId
+          },
+          body: JSON.stringify({ history: updated })
+        }).catch(err => console.log('Error de sincronización de historial:', err));
+      }
+
       return updated;
     });
   };
@@ -129,7 +162,21 @@ export default function App() {
   const handleDeleteScannedItem = (id: string) => {
     setScannedHistory(prev => {
       const updated = prev.filter(item => item.id !== id);
-      localStorage.setItem('nutrisaas_scanned_history', JSON.stringify(updated));
+      const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
+      localStorage.setItem(key, JSON.stringify(updated));
+
+      // Sync updated history to server database
+      if (activeUserId) {
+        fetch('/api/database/scanned_history/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': activeUserId
+          },
+          body: JSON.stringify({ history: updated })
+        }).catch(err => console.log('Error de sincronización de historial:', err));
+      }
+
       return updated;
     });
   };
@@ -144,7 +191,8 @@ export default function App() {
       carbs_g: historicalItem.total_carbs_g,
       fat_g: historicalItem.total_fat_g,
       serving_count: 1.0,
-      meal_type: mealType
+      meal_type: mealType,
+      photoBase64: historicalItem.photoBase64 || undefined
     };
 
     try {
@@ -157,6 +205,24 @@ export default function App() {
         created_at: new Date().toISOString()
       };
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      
+      // Seed to server mock
+      try {
+        await fetch('/api/database/daily_logs/insert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': activeUserId || ''
+          },
+          body: JSON.stringify({
+            ...payload,
+            id: newLog.id
+          })
+        });
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el log histórico con el servidor:', e);
+      }
+
       setDbStatusMsg({
         type: 'success',
         text: `¡Platillo del historial registrado exitosamente en tu bitácora de hoy!`
@@ -201,6 +267,186 @@ export default function App() {
       fetchUserData();
     }
   }, [activeUserId]);
+
+  // Read URL query parameter for automated Apple Watch synchronization (e.g. ?active_cals=500)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const activeCalsParam = params.get('active_cals');
+    if (activeCalsParam && activeUserId) {
+      const kcal = Math.max(0, Math.min(3000, Number(activeCalsParam) || 0));
+      localStorage.setItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
+      setCalcForm(prev => ({
+        ...prev,
+        activeCaloriesToday: kcal,
+        wearable_enabled: true
+      }));
+      setDbStatusMsg({
+        type: 'success',
+        text: `¡Apple Watch sincronizado automáticamente! Registradas ${kcal} kcal activas hoy.`
+      });
+      // Clear URL parameter without reloading the page
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, [activeUserId]);
+
+  // Request persistent storage to prevent browser from cleaning localStorage under low disk/inactivity
+  useEffect(() => {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then((persisted) => {
+        if (persisted) {
+          console.log("Storage persistence granted by browser.");
+        } else {
+          console.log("Storage persistence not granted yet.");
+        }
+      }).catch(err => {
+        console.error("Storage persistence request failed:", err);
+      });
+    }
+  }, []);
+
+  const handleExportData = () => {
+    try {
+      if (!activeUserId) return;
+      
+      const localProfilesKey = 'nutrisaas_local_profiles';
+      const localLogsKey = 'nutrisaas_local_logs';
+      const scannedHistoryKey = `nutrisaas_scanned_history_${activeUserId}`;
+      const waterIntakeKey = `nutrisaas_water_intake_${activeUserId}`;
+      const fiberIntakeKey = `nutrisaas_fiber_intake_${activeUserId}`;
+      const suppsStateKey = `nutrisaas_supps_state_${activeUserId}`;
+
+      const profiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+      const allLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      const scannedHistory = JSON.parse(localStorage.getItem(scannedHistoryKey) || '[]');
+      const waterIntake = localStorage.getItem(waterIntakeKey) || '3';
+      const fiberIntake = localStorage.getItem(fiberIntakeKey) || '10';
+      const suppsState = JSON.parse(localStorage.getItem(suppsStateKey) || '{}');
+
+      // Build consolidated backup structure
+      const backupData = {
+        version: "1.4.0",
+        exportDate: new Date().toISOString(),
+        userId: activeUserId,
+        profile: profiles[activeUserId] || null,
+        logs: allLogs.filter((log: any) => log.user_id === activeUserId),
+        scannedHistory,
+        waterIntake: Number(waterIntake),
+        fiberIntake: Number(fiberIntake),
+        suppsState
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      
+      const formattedDate = new Date().toISOString().split('T')[0];
+      downloadAnchor.setAttribute("download", `nutrisaas_backup_${activeUserId}_${formattedDate}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      setDbStatusMsg({
+        type: 'success',
+        text: '¡Respaldo exportado correctamente! Guarda este archivo en tu teléfono o computadora.'
+      });
+    } catch (err: any) {
+      setDbStatusMsg({
+        type: 'error',
+        text: `Error al exportar respaldo: ${err.message || 'Error desconocido'}`
+      });
+    }
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const backupText = event.target?.result as string;
+        if (!backupText) throw new Error('El archivo está vacío.');
+
+        const data = JSON.parse(backupText);
+        if (!data || !data.userId) {
+          throw new Error('El formato del archivo de respaldo no es válido o está corrupto.');
+        }
+
+        // Restore to localStorage
+        const targetUserId = activeUserId || data.userId; // Default to active, fallback to backup user
+        
+        // 1. Profile
+        if (data.profile) {
+          const localProfilesKey = 'nutrisaas_local_profiles';
+          const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
+          localProfiles[targetUserId] = data.profile;
+          localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+        }
+
+        // 2. Logs (Merge, avoiding duplicates)
+        if (Array.isArray(data.logs)) {
+          const localLogsKey = 'nutrisaas_local_logs';
+          const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+          
+          // Remove existing logs for this user to avoid duplication, or match by id
+          const existingIds = new Set(data.logs.map((l: any) => l.id));
+          const filteredLogs = localLogs.filter((l: any) => l.user_id !== targetUserId || !existingIds.has(l.id));
+          const mergedLogs = [...data.logs, ...filteredLogs];
+          
+          localStorage.setItem(localLogsKey, JSON.stringify(mergedLogs));
+        }
+
+        // 3. Scanned History
+        if (Array.isArray(data.scannedHistory)) {
+          const scannedHistoryKey = `nutrisaas_scanned_history_${targetUserId}`;
+          localStorage.setItem(scannedHistoryKey, JSON.stringify(data.scannedHistory));
+          setScannedHistory(data.scannedHistory);
+          if (targetUserId) {
+            fetch('/api/database/scanned_history/update', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-user-id': targetUserId
+              },
+              body: JSON.stringify({ history: data.scannedHistory })
+            }).catch(err => console.log('Error de importación de historial:', err));
+          }
+        }
+
+        // 4. Water and Fiber
+        if (data.waterIntake !== undefined) {
+          localStorage.setItem(`nutrisaas_water_intake_${targetUserId}`, String(data.waterIntake));
+          setWaterIntake(Number(data.waterIntake));
+        }
+        if (data.fiberIntake !== undefined) {
+          localStorage.setItem(`nutrisaas_fiber_intake_${targetUserId}`, String(data.fiberIntake));
+        }
+
+        // 5. Supplements
+        if (data.suppsState) {
+          localStorage.setItem(`nutrisaas_supps_state_${targetUserId}`, JSON.stringify(data.suppsState));
+        }
+
+        setDbStatusMsg({
+          type: 'success',
+          text: '¡Respaldo importado correctamente! Tus metas, registros de comida e historial de fotos han sido restaurados.'
+        });
+
+        // Refresh user data
+        fetchUserData();
+
+      } catch (err: any) {
+        setDbStatusMsg({
+          type: 'error',
+          text: `Error al importar respaldo: ${err.message || 'Formato de archivo inválido.'}`
+        });
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input value to allow importing same file again
+    e.target.value = '';
+  };
 
   const fetchUserData = async () => {
     if (!activeUserId) return;
@@ -271,6 +517,9 @@ export default function App() {
       if (activeProf) {
         const birthDate = new Date(activeProf.date_of_birth);
         const ageCalculated = new Date().getFullYear() - birthDate.getFullYear();
+        const savedWearableCals = localStorage.getItem(`nutrisaas_wearable_active_cals_${activeUserId}`);
+        const activeCalVal = savedWearableCals !== null ? Number(savedWearableCals) : 420;
+
         setCalcForm(prev => ({
           ...prev,
           weight_kg: Number(activeProf.weight_kg),
@@ -279,6 +528,7 @@ export default function App() {
           gender: activeProf.gender as Gender,
           activity_level: activeProf.activity_level as ActivityLevel,
           goal: activeProf.goal as Goal,
+          activeCaloriesToday: activeCalVal,
           has_constipation_trouble: activeProf.has_constipation_trouble !== undefined ? !!activeProf.has_constipation_trouble : false,
           has_long_trips: activeProf.has_long_trips !== undefined ? !!activeProf.has_long_trips : false,
           has_other_condition: activeProf.has_other_condition !== undefined ? !!activeProf.has_other_condition : false,
@@ -365,6 +615,30 @@ export default function App() {
       }
 
       setDailyLogs(userLogs);
+
+      // 4. Load scanned history from localStorage, sync with server if empty in localStorage
+      const scannedHistoryKey = `nutrisaas_scanned_history_${activeUserId}`;
+      let localHistory = [];
+      try {
+        localHistory = JSON.parse(localStorage.getItem(scannedHistoryKey) || '[]');
+      } catch (_) {}
+
+      if (localHistory.length === 0) {
+        try {
+          const scanRes = await fetch('/api/database/scanned_history', {
+            headers: { 'x-user-id': activeUserId || '' }
+          });
+          if (scanRes.ok) {
+            const sData = await scanRes.json();
+            if (sData.history && sData.history.length > 0) {
+              localStorage.setItem(scannedHistoryKey, JSON.stringify(sData.history));
+              setScannedHistory(sData.history);
+            }
+          }
+        } catch (e) {
+          console.log('Error de red al intentar sincronizar el historial de escaneo con el servidor:', e);
+        }
+      }
 
     } catch (err) {
       console.error('Error in fetchUserData local-first:', err);
@@ -476,11 +750,15 @@ export default function App() {
   const handleUpdateSupabaseProfile = async () => {
     if (!calculatedTarget) return;
     setLoading(true);
+
+    const birthYear = new Date().getFullYear() - (Number(calcForm.age) || 30);
+    const dateOfBirth = `${birthYear}-01-01`;
     
     const payload = {
       gender: calcForm.gender,
       height_cm: calcForm.height_cm,
       weight_kg: calcForm.weight_kg,
+      date_of_birth: dateOfBirth,
       activity_level: calcForm.activity_level,
       goal: calcForm.goal,
       target_calories: calculatedTarget.target_calories,
@@ -497,11 +775,25 @@ export default function App() {
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
       if (activeUserId) {
+        // 1. Update localStorage
         localProfiles[activeUserId] = {
           ...localProfiles[activeUserId],
           ...payload
         };
         localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+
+        // 2. Update backend database
+        if (!isStaticMode) {
+          await fetch('/api/database/profile/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': activeUserId
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+
         setDbStatusMsg({
           type: 'success',
           text: `¡Tu perfil clínico y metas nutricionales han sido actualizados con éxito!`
@@ -981,7 +1273,8 @@ export default function App() {
       carbs_g: totalCarb,
       fat_g: totalFat,
       serving_count: mult,
-      meal_type: loggedMealType
+      meal_type: loggedMealType,
+      photoBase64: cameraPhotoBase64 || undefined
     };
 
     try {
@@ -994,6 +1287,25 @@ export default function App() {
         created_at: new Date().toISOString()
       };
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+
+      // Seed to server mock
+      try {
+        await fetch('/api/database/daily_logs/insert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': activeUserId || ''
+          },
+          body: JSON.stringify({
+            ...payload,
+            id: newLog.id
+          })
+        });
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el log analizado con el servidor:', e);
+      }
+
+      setCameraPhotoBase64(null); // Clear photo preview on success
       setDbStatusMsg({
         type: 'success',
         text: `¡Alimento analizado correctamente e integrado a tu bitácora de hoy!`
@@ -1099,6 +1411,23 @@ export default function App() {
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const filtered = localLogs.filter((l: any) => l.id !== logId);
       localStorage.setItem(localLogsKey, JSON.stringify(filtered));
+
+      // Sync deletion to server database
+      if (activeUserId && !isStaticMode) {
+        try {
+          await fetch('/api/database/daily_logs/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': activeUserId
+            },
+            body: JSON.stringify({ log_id: logId })
+          });
+        } catch (e) {
+          console.log('Error de red al intentar sincronizar la eliminación con el servidor:', e);
+        }
+      }
+
       setDbStatusMsg({
         type: 'success',
         text: `El platillo ha sido eliminado de tu registro diario.`
@@ -1144,6 +1473,24 @@ export default function App() {
         created_at: new Date().toISOString()
       };
       localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      
+      // Seed to server mock
+      try {
+        await fetch('/api/database/daily_logs/insert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': activeUserId || ''
+          },
+          body: JSON.stringify({
+            ...payload,
+            id: newLog.id
+          })
+        });
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el log rápido con el servidor:', e);
+      }
+
       setDbStatusMsg({
         type: 'success',
         text: `¡${name} agregado con éxito a tu bitácora de hoy!`
@@ -1407,6 +1754,7 @@ export default function App() {
             {/* Tab 1: Home View */}
             {mobileScreen === 'home' && (
               <HomeView
+                key={activeUserId || 'guest'}
                 activeProfile={activeProfile}
                 activeUserId={activeUserId}
                 calcForm={calcForm}
@@ -1436,6 +1784,8 @@ export default function App() {
                 calculatedTarget={calculatedTarget}
                 handleUpdateSupabaseProfile={handleUpdateSupabaseProfile}
                 loading={loading}
+                handleExportData={handleExportData}
+                handleImportData={handleImportData}
               />
             )}
 

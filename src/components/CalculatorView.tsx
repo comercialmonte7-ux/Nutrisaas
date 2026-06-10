@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sliders, Flame, UserCheck } from 'lucide-react';
+import { Sliders, Flame, UserCheck, Save, Download, Upload, Info } from 'lucide-react';
 import { CalculationResult } from '../types';
 
 export interface CalculatorViewProps {
@@ -8,6 +8,8 @@ export interface CalculatorViewProps {
   calculatedTarget: CalculationResult | null;
   handleUpdateSupabaseProfile: () => void;
   loading: boolean;
+  handleExportData: () => void;
+  handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export default function CalculatorView({
@@ -15,8 +17,36 @@ export default function CalculatorView({
   setCalcForm,
   calculatedTarget,
   handleUpdateSupabaseProfile,
-  loading
+  loading,
+  handleExportData,
+  handleImportData
 }: CalculatorViewProps) {
+  const [weightText, setWeightText] = React.useState(calcForm.weight_kg ? String(calcForm.weight_kg) : '');
+  const [heightText, setHeightText] = React.useState(calcForm.height_cm ? String(calcForm.height_cm) : '');
+  const [ageText, setAgeText] = React.useState(calcForm.age ? String(calcForm.age) : '');
+
+  // Synchronize string inputs when calcForm changes from elsewhere (like startup loading)
+  React.useEffect(() => {
+    const parsedWeight = parseFloat(weightText) || 0;
+    if (parsedWeight !== calcForm.weight_kg) {
+      setWeightText(calcForm.weight_kg ? String(calcForm.weight_kg) : '');
+    }
+  }, [calcForm.weight_kg]);
+
+  React.useEffect(() => {
+    const parsedHeight = parseInt(heightText, 10) || 0;
+    if (parsedHeight !== calcForm.height_cm) {
+      setHeightText(calcForm.height_cm ? String(calcForm.height_cm) : '');
+    }
+  }, [calcForm.height_cm]);
+
+  React.useEffect(() => {
+    const parsedAge = parseInt(ageText, 10) || 0;
+    if (parsedAge !== calcForm.age) {
+      setAgeText(calcForm.age ? String(calcForm.age) : '');
+    }
+  }, [calcForm.age]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in" id="calculator_view_container">
       {/* Parameter Settings */}
@@ -28,28 +58,56 @@ export default function CalculatorView({
           <div className="space-y-1">
             <span className="text-xs text-stone-600 font-bold block">Peso corporal (kg)</span>
             <input 
-              type="number" 
-              step="0.1" 
-              value={calcForm.weight_kg} 
-              onChange={e => setCalcForm((p: any) => ({ ...p, weight_kg: parseFloat(e.target.value) || 0 }))} 
+              type="text" 
+              inputMode="decimal"
+              value={weightText} 
+              onChange={e => {
+                // Allow only digits and a single dot
+                let val = e.target.value.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+                const parts = val.split('.');
+                val = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
+                
+                // Strip leading zero if followed by a digit
+                val = val.replace(/^0+(?=\d)/, '');
+
+                setWeightText(val);
+                const num = parseFloat(val);
+                setCalcForm((p: any) => ({ ...p, weight_kg: isNaN(num) ? 0 : num }));
+              }} 
               className="w-full bg-stone-50 border p-2.5 rounded-lg text-sm font-bold focus:outline-hidden focus:ring-1 focus:ring-[#5A7C56]" 
             />
           </div>
           <div className="space-y-1">
             <span className="text-xs text-stone-600 font-bold block">Estatura corporal (cm)</span>
             <input 
-              type="number" 
-              value={calcForm.height_cm} 
-              onChange={e => setCalcForm((p: any) => ({ ...p, height_cm: parseInt(e.target.value) || 0 }))} 
+              type="text" 
+              inputMode="numeric"
+              value={heightText} 
+              onChange={e => {
+                let val = e.target.value.replace(/[^0-9]/g, '');
+                val = val.replace(/^0+(?=\d)/, '');
+                
+                setHeightText(val);
+                const num = parseInt(val, 10);
+                setCalcForm((p: any) => ({ ...p, height_cm: isNaN(num) ? 0 : num }));
+              }} 
               className="w-full bg-stone-50 border p-2.5 rounded-lg text-sm font-bold focus:outline-hidden focus:ring-1 focus:ring-[#5A7C56]" 
             />
           </div>
           <div className="space-y-1">
             <span className="text-xs text-stone-600 font-bold block">Edad</span>
             <input 
-              type="number" 
-              value={calcForm.age} 
-              onChange={e => setCalcForm((p: any) => ({ ...p, age: parseInt(e.target.value) || 0 }))} 
+              type="text" 
+              inputMode="numeric"
+              value={ageText} 
+              onChange={e => {
+                let val = e.target.value.replace(/[^0-9]/g, '');
+                val = val.replace(/^0+(?=\d)/, '');
+
+                setAgeText(val);
+                const num = parseInt(val, 10);
+                setCalcForm((p: any) => ({ ...p, age: isNaN(num) ? 0 : num }));
+              }} 
               className="w-full bg-stone-50 border p-2.5 rounded-lg text-sm font-bold focus:outline-hidden focus:ring-1 focus:ring-[#5A7C56]" 
             />
           </div>
@@ -172,7 +230,7 @@ export default function CalculatorView({
       </div>
 
       {/* Target Result calculations */}
-      <div className="lg:col-span-5" id="calculator_results_panel">
+      <div className="lg:col-span-5 space-y-6" id="calculator_results_panel">
         {calculatedTarget && (
           <div className="bg-[#EFF4EE] rounded-2xl p-6 border border-[#BCDAB7] space-y-4">
             <h4 className="text-base font-bold text-stone-900 flex items-center gap-1">
@@ -200,6 +258,38 @@ export default function CalculatorView({
             </button>
           </div>
         )}
+
+        {/* Respaldo y Restauración de Datos Widget */}
+        <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs space-y-4">
+          <h4 className="text-sm font-extrabold text-[#3D5C3A] flex items-center gap-2 border-b border-[#EFF4EE] pb-3">
+            <Save className="h-5 w-5 text-[#5A7C56]" /> Respaldo y Restauración de Datos
+          </h4>
+          <p className="text-[11px] text-stone-500 leading-normal font-semibold">
+            Para evitar la pérdida de tus fotos y bitácoras si el navegador limpia el almacenamiento local (común en iPhones/Safari), te recomendamos exportar un respaldo periódico a tu dispositivo.
+          </p>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button 
+              onClick={handleExportData}
+              className="bg-white hover:bg-stone-50 border border-stone-250 py-2.5 rounded-xl text-xs font-bold text-stone-700 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-3xs"
+            >
+              <Download className="h-3.5 w-3.5 text-[#5A7C56]" /> Exportar Respaldo
+            </button>
+            <label 
+              className="bg-[#EFF4EE] hover:bg-[#E2ECD0] text-[#3D5C3A] py-2.5 rounded-xl text-xs font-extrabold border border-[#CDDCD0] transition cursor-pointer flex items-center justify-center gap-1.5 shadow-3xs"
+            >
+              <Upload className="h-3.5 w-3.5 text-[#5A7C56]" /> Importar Respaldo
+              <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
+            </label>
+          </div>
+          
+          <div className="bg-amber-50 text-amber-950 p-2.5 rounded-xl text-[10px] leading-relaxed border border-amber-200 flex items-start gap-2">
+            <Info className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-extrabold block">Recomendación de Seguridad:</span>
+              El archivo de respaldo contiene toda tu información de perfil, metas, bitácoras históricas y fotos. Guárdalo de forma segura.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

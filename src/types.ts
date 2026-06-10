@@ -59,6 +59,7 @@ export interface DailyLog {
   serving_count: number;
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   created_at: string;
+  photoBase64?: string;
 }
 
 export interface WearableConfig {

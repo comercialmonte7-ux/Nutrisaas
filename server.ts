@@ -5,6 +5,7 @@
 
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { CHILEAN_LA_FOODS, searchFoods, findFoodByBarcode } from './src/foodDatabase';
@@ -38,8 +39,34 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+// Helper functions to read/write JSON files for local persistence
+function readLocalDbFile(filename: string, fallback: any) {
+  try {
+    const filePath = path.join(process.cwd(), 'data', filename);
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  } catch (e) {
+    console.log(`[Local DB] Warning: Failed to read local DB file ${filename}:`, e);
+  }
+  return fallback;
+}
+
+function writeLocalDbFile(filename: string, data: any) {
+  try {
+    const dataDir = path.join(process.cwd(), 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const filePath = path.join(dataDir, filename);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {
+    console.log(`[Local DB] Warning: Failed to write local DB file ${filename}:`, e);
+  }
+}
+
 // In-Memory Multi-tenant Simulated Database (Supabase Simulation)
-const simulatedUsers = {
+const defaultUsers = {
   "de99bbfb-3712-40de-8e3b-9304005fc080": {
     email: "ricardo.marimo@gmail.com",
     first_name: "Ricardo",
@@ -80,7 +107,7 @@ const simulatedUsers = {
   }
 };
 
-let simulatedDailyLogs: DailyLog[] = [
+const defaultDailyLogs: DailyLog[] = [
   {
     id: "log-1",
     user_id: "de99bbfb-3712-40de-8e3b-9304005fc080",
@@ -139,6 +166,9 @@ let simulatedDailyLogs: DailyLog[] = [
     created_at: "2026-06-07T21:00:00Z"
   }
 ];
+
+const simulatedUsers = readLocalDbFile('profiles.json', defaultUsers);
+let simulatedDailyLogs: DailyLog[] = readLocalDbFile('logs.json', defaultDailyLogs);
 
 // --- API ROUTES FIRST ---
 
@@ -655,6 +685,7 @@ app.post('/api/auth/login', (req, res) => {
   };
 
   (simulatedUsers as any)[newUserId] = newProfile;
+  writeLocalDbFile('profiles.json', simulatedUsers);
 
   // Add dummy initial logs for this new user so their dashboard is not completely empty
   const todayStr = new Date().toISOString().split('T')[0];
@@ -672,6 +703,7 @@ app.post('/api/auth/login', (req, res) => {
     meal_type: "breakfast",
     created_at: new Date().toISOString()
   });
+  writeLocalDbFile('logs.json', simulatedDailyLogs);
 
   return res.json({
     userId: newUserId,
@@ -682,7 +714,7 @@ app.post('/api/auth/login', (req, res) => {
 
 // Simulates user authentication session switches in frontend
 app.get('/api/database/users', (req, res) => {
-  res.json(Object.entries(simulatedUsers).map(([id, val]) => ({ id, ...val })));
+  res.json(Object.entries(simulatedUsers).map(([id, val]) => ({ id, ...(val as any) })));
 });
 
 // GET profile with Row Level Security check
@@ -725,6 +757,7 @@ app.post('/api/database/profile/update', (req, res) => {
     ...simulatedUsers[userIdHeader as keyof typeof simulatedUsers],
     ...updatedData
   };
+  writeLocalDbFile('profiles.json', simulatedUsers);
 
   res.json({
     success: true,
@@ -763,7 +796,7 @@ app.get('/api/database/daily_logs', (req, res) => {
 // Log food
 app.post('/api/database/daily_logs/insert', (req, res) => {
   const userIdHeader = String(req.headers['x-user-id'] || '');
-  const { log_date, food_id, custom_food_name, calories, protein_g, carbs_g, fat_g, serving_count, meal_type } = req.body;
+  const { id, log_date, food_id, custom_food_name, calories, protein_g, carbs_g, fat_g, serving_count, meal_type, photoBase64 } = req.body;
 
   if (!userIdHeader) {
     return res.status(401).json({
@@ -773,7 +806,7 @@ app.post('/api/database/daily_logs/insert', (req, res) => {
   }
 
   const newLog: DailyLog = {
-    id: `log-${Date.now()}`,
+    id: id || `log-${Date.now()}`,
     user_id: userIdHeader,
     log_date: log_date || new Date().toISOString().split('T')[0],
     food_id,
@@ -784,10 +817,12 @@ app.post('/api/database/daily_logs/insert', (req, res) => {
     fat_g: Number(fat_g) || 0,
     serving_count: Number(serving_count) || 1.0,
     meal_type: meal_type || 'breakfast',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    photoBase64: photoBase64 || undefined
   };
 
   simulatedDailyLogs.push(newLog);
+  writeLocalDbFile('logs.json', simulatedDailyLogs);
 
   res.json({
     success: true,
@@ -820,6 +855,7 @@ app.post('/api/database/daily_logs/delete', (req, res) => {
   }
 
   simulatedDailyLogs = simulatedDailyLogs.filter(l => l.id !== log_id);
+  writeLocalDbFile('logs.json', simulatedDailyLogs);
   res.json({
     success: true,
     deleted_id: log_id,
@@ -891,6 +927,45 @@ app.post('/api/database/raw-query', (req, res) => {
     reason,
     rows: simulatedOutput,
     current_uid_acting_as: userIdHeader
+  });
+});
+// GET scanned history with RLS simulation
+app.get('/api/database/scanned_history', (req, res) => {
+  const userIdHeader = String(req.headers['x-user-id'] || '');
+  
+  if (!userIdHeader) {
+    return res.status(401).json({
+      error: "unauthorized",
+      message: "Falta encabezado de autenticación. RLS falló.",
+    });
+  }
+
+  const allHistory = readLocalDbFile('scanned_history.json', {});
+  const userHistory = allHistory[userIdHeader] || [];
+  
+  res.json({
+    history: userHistory
+  });
+});
+
+// Update scanned history
+app.post('/api/database/scanned_history/update', (req, res) => {
+  const userIdHeader = String(req.headers['x-user-id'] || '');
+  const { history } = req.body;
+
+  if (!userIdHeader) {
+    return res.status(401).json({
+      error: "forbidden",
+      message: "Row-Level Security error: INSERT/UPDATE violado. auth.uid() vacio."
+    });
+  }
+
+  const allHistory = readLocalDbFile('scanned_history.json', {});
+  allHistory[userIdHeader] = Array.isArray(history) ? history : [];
+  writeLocalDbFile('scanned_history.json', allHistory);
+
+  res.json({
+    success: true
   });
 });
 

@@ -14,7 +14,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
   // Read Google Client ID from environment variables, localStorage fallback, or default hardcoded value
   const [googleClientId, setGoogleClientId] = useState<string>(() => {
     return (
-      (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) ||
+      ((import.meta as any).env.VITE_GOOGLE_CLIENT_ID as string) ||
       localStorage.getItem('nutrisaas_google_client_id') ||
       '369657284487-p7fjkkeejlgof9c4rt60tlgt5im6u10v.apps.googleusercontent.com'
     );
@@ -83,42 +83,105 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       localStorage.setItem('nutrisaas_active_user_id', finalUserId);
       localStorage.removeItem('nutrisaas_is_static_mode');
 
-      // 2. Seed/update user profile in localStorage
+      // 2. Seed/update user profile in localStorage (Server-First approach)
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
 
-      // Parse first and last name from name
-      const nameParts = name.split(' ');
-      const first_name = nameParts[0] || 'Usuario';
-      const last_name = nameParts.slice(1).join(' ') || 'Google';
+      let profileData: any = null;
 
-      // Always update/seed Google info to keep profile updated
-      localProfiles[finalUserId] = {
-        ...localProfiles[finalUserId],
-        email: cleanEmail,
-        first_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
-        last_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
-        picture: picture, // Save profile picture URL
-        gender: localProfiles[finalUserId]?.gender || (cleanEmail === 'ricardo.marimo@gmail.com' ? "male" : "male"),
-        height_cm: localProfiles[finalUserId]?.height_cm || (cleanEmail === 'ricardo.marimo@gmail.com' ? 178 : 175),
-        weight_kg: localProfiles[finalUserId]?.weight_kg || (cleanEmail === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0),
-        activity_level: localProfiles[finalUserId]?.activity_level || (cleanEmail === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active"),
-        goal: localProfiles[finalUserId]?.goal || "lose_weight",
-        target_calories: localProfiles[finalUserId]?.target_calories || (cleanEmail === 'ricardo.marimo@gmail.com' ? 2100 : 1900),
-        target_protein_g: localProfiles[finalUserId]?.target_protein_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 160 : 140),
-        target_carbs_g: localProfiles[finalUserId]?.target_carbs_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 210 : 180),
-        target_fat_g: localProfiles[finalUserId]?.target_fat_g || (cleanEmail === 'ricardo.marimo@gmail.com' ? 70 : 68),
-        date_of_birth: localProfiles[finalUserId]?.date_of_birth || (cleanEmail === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12"),
-        has_constipation_trouble: localProfiles[finalUserId]?.has_constipation_trouble || false,
-        has_long_trips: localProfiles[finalUserId]?.has_long_trips || false,
-        has_other_condition: localProfiles[finalUserId]?.has_other_condition || false,
-        other_condition_notes: localProfiles[finalUserId]?.other_condition_notes || ""
-      };
+      // Try fetching the existing profile from the server database
+      try {
+        const profRes = await fetch('/api/database/profile', {
+          headers: { 'x-user-id': finalUserId }
+        });
+        if (profRes.ok) {
+          const pData = await profRes.json();
+          if (pData && pData.profile) {
+            profileData = pData.profile;
+          }
+        }
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el perfil al iniciar sesión:', e);
+      }
+
+      // If not found on server, trigger the login/register endpoint to initialize it on the server
+      if (!profileData) {
+        try {
+          const authRes = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail })
+          });
+          if (authRes.ok) {
+            const aData = await authRes.json();
+            if (aData && aData.profile) {
+              profileData = aData.profile;
+              if (aData.userId && aData.userId !== finalUserId) {
+                finalUserId = aData.userId;
+                localStorage.setItem('nutrisaas_active_user_id', finalUserId);
+              }
+            }
+          }
+        } catch (e) {
+          console.log('Error al registrar/autenticar en el servidor:', e);
+        }
+      }
+
+      // Fallback: If still no profile (e.g., server offline), seed locally
+      if (!profileData) {
+        const nameParts = name.split(' ');
+        const first_name = nameParts[0] || 'Usuario';
+        const last_name = nameParts.slice(1).join(' ') || 'Google';
+
+        profileData = {
+          email: cleanEmail,
+          first_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Ricardo" : first_name,
+          last_name: cleanEmail === 'ricardo.marimo@gmail.com' ? "Marimo" : last_name,
+          picture: picture,
+          gender: cleanEmail === 'ricardo.marimo@gmail.com' ? "male" : "male",
+          height_cm: cleanEmail === 'ricardo.marimo@gmail.com' ? 178 : 175,
+          weight_kg: cleanEmail === 'ricardo.marimo@gmail.com' ? 82.0 : 75.0,
+          activity_level: cleanEmail === 'ricardo.marimo@gmail.com' ? "moderately_active" : "lightly_active",
+          goal: "lose_weight",
+          target_calories: cleanEmail === 'ricardo.marimo@gmail.com' ? 2100 : 1900,
+          target_protein_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 160 : 140,
+          target_carbs_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 210 : 180,
+          target_fat_g: cleanEmail === 'ricardo.marimo@gmail.com' ? 70 : 68,
+          date_of_birth: cleanEmail === 'ricardo.marimo@gmail.com' ? "1994-06-07" : "1995-10-12",
+          has_constipation_trouble: false,
+          has_long_trips: false,
+          has_other_condition: false,
+          other_condition_notes: ""
+        };
+      } else {
+        // Update photo picture if it changed
+        profileData.picture = picture || profileData.picture;
+      }
+
+      localProfiles[finalUserId] = profileData;
       localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
 
-      // 3. Seed initial daily logs if empty (just like before)
+      // 3. Seed initial daily logs and sync with server
       const localLogsKey = 'nutrisaas_local_logs';
-      const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+      let localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
+
+      try {
+        const logsRes = await fetch('/api/database/daily_logs', {
+          headers: { 'x-user-id': finalUserId }
+        });
+        if (logsRes.ok) {
+          const lData = await logsRes.json();
+          if (lData.logs && lData.logs.length > 0) {
+            const existingIds = new Set(localLogs.map((l: any) => l.id));
+            const newServerLogs = lData.logs.filter((l: any) => !existingIds.has(l.id));
+            localLogs = [...newServerLogs, ...localLogs];
+            localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
+          }
+        }
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar las bitácoras al iniciar sesión:', e);
+      }
+
       const userLogs = localLogs.filter((l: any) => l.user_id === finalUserId);
       if (userLogs.length === 0) {
         const todayStr = new Date().toISOString().split('T')[0];
