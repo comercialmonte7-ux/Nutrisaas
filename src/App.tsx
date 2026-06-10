@@ -53,7 +53,7 @@ export default function App() {
     const activeId = localStorage.getItem('nutrisaas_active_user_id');
     const key = activeId ? `nutrisaas_water_intake_${activeId}` : 'nutrisaas_water_intake';
     const saved = localStorage.getItem(key);
-    return saved ? Number(saved) : 3;
+    return saved ? Number(saved) : 0;
   });
 
   const handleModifyWater = (amount: number) => {
@@ -69,9 +69,9 @@ export default function App() {
   useEffect(() => {
     if (activeUserId) {
       const saved = localStorage.getItem(`nutrisaas_water_intake_${activeUserId}`);
-      setWaterIntake(saved ? Number(saved) : 3);
+      setWaterIntake(saved ? Number(saved) : 0);
     } else {
-      setWaterIntake(3);
+      setWaterIntake(0);
     }
   }, [activeUserId]);
 
@@ -87,7 +87,7 @@ export default function App() {
     specific_protein_ratio: 2.0, // 2.0g/kg
     specific_fat_ratio: 0.9,     // 0.9g/kg
     wearable_enabled: true,
-    activeCaloriesToday: 420,
+    activeCaloriesToday: 0,
     deviceName: 'Apple Watch Ultra',
     has_constipation_trouble: true,
     has_long_trips: true,
@@ -519,7 +519,7 @@ export default function App() {
         const birthYear = birthYearStr ? parseInt(birthYearStr, 10) : 1995;
         const ageCalculated = new Date().getFullYear() - birthYear;
         const savedWearableCals = localStorage.getItem(`nutrisaas_wearable_active_cals_${activeUserId}`);
-        const activeCalVal = savedWearableCals !== null ? Number(savedWearableCals) : 420;
+        const activeCalVal = savedWearableCals !== null ? Number(savedWearableCals) : 0;
 
         setCalcForm(prev => ({
           ...prev,
@@ -563,56 +563,9 @@ export default function App() {
         }
       }
 
-      // If still no logs, seed default ones
+      // If still no logs, do not seed default ones (start clean)
       if (userLogs.length === 0) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const seeds = [
-          {
-            id: `local-log-1-${Date.now()}`,
-            user_id: activeUserId,
-            log_date: todayStr,
-            food_id: 1,
-            custom_food_name: "Palta Hass Chilena",
-            calories: 160,
-            protein_g: 2.0,
-            carbs_g: 9.0,
-            fat_g: 15.0,
-            serving_count: 1.2,
-            meal_type: "breakfast",
-            created_at: new Date().toISOString()
-          },
-          {
-            id: `local-log-2-${Date.now()}`,
-            user_id: activeUserId,
-            log_date: todayStr,
-            food_id: 2,
-            custom_food_name: "Marraqueta Chilena (Pan Batido)",
-            calories: 216,
-            protein_g: 6.8,
-            carbs_g: 44.8,
-            fat_g: 0.8,
-            serving_count: 0.8,
-            meal_type: "breakfast",
-            created_at: new Date().toISOString()
-          },
-          {
-            id: `local-log-3-${Date.now()}`,
-            user_id: activeUserId,
-            log_date: todayStr,
-            food_id: 3,
-            custom_food_name: "Lomo Liso Vacuno (Cocido)",
-            calories: 292,
-            protein_g: 42.0,
-            carbs_g: 0.0,
-            fat_g: 13.5,
-            serving_count: 1.5,
-            meal_type: "lunch",
-            created_at: new Date().toISOString()
-          }
-        ];
-        localLogs = [...localLogs, ...seeds];
-        localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
-        userLogs = seeds;
+        userLogs = [];
       }
 
       setDailyLogs(userLogs);

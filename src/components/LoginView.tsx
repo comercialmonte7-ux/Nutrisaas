@@ -197,54 +197,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       }
 
       const userLogs = localLogs.filter((l: any) => l.user_id === finalUserId);
-      if (userLogs.length === 0) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const seeds = [
-          {
-            id: `local-log-1-${Date.now()}`,
-            user_id: finalUserId,
-            log_date: todayStr,
-            food_id: 1,
-            custom_food_name: "Palta Hass Chilena",
-            calories: 160,
-            protein_g: 2.0,
-            carbs_g: 9.0,
-            fat_g: 15.0,
-            serving_count: 1.2,
-            meal_type: "breakfast",
-            created_at: new Date().toISOString()
-          },
-          {
-            id: `local-log-2-${Date.now()}`,
-            user_id: finalUserId,
-            log_date: todayStr,
-            food_id: 2,
-            custom_food_name: "Marraqueta Chilena (Pan Batido)",
-            calories: 216,
-            protein_g: 6.8,
-            carbs_g: 44.8,
-            fat_g: 0.8,
-            serving_count: 0.8,
-            meal_type: "breakfast",
-            created_at: new Date().toISOString()
-          },
-          {
-            id: `local-log-3-${Date.now()}`,
-            user_id: finalUserId,
-            log_date: todayStr,
-            food_id: 3,
-            custom_food_name: "Lomo Liso Vacuno (Cocido)",
-            calories: 292,
-            protein_g: 42.0,
-            carbs_g: 0.0,
-            fat_g: 13.5,
-            serving_count: 1.5,
-            meal_type: "lunch",
-            created_at: new Date().toISOString()
-          }
-        ];
-        localStorage.setItem(localLogsKey, JSON.stringify([...localLogs, ...seeds]));
-      }
+      // Initial seeds removed to start with a clean log
 
       onLoginSuccess(finalUserId);
     } catch (err: any) {

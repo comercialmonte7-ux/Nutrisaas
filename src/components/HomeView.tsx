@@ -382,6 +382,8 @@ export default function HomeView({
    const activeUserName = activeProfile ? activeProfile.first_name : "Ricardo";
    const userSuppsList = Object.keys(userSupplements);
    const isUserSuppsComplete = userSuppsList.length > 0 && Object.values(userSupplements).every(val => val);
+   const rawDate = new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+   const formattedDate = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
  
    return (
      <div className="space-y-6 animate-fade-in" id="home_dashboard">
@@ -394,7 +396,11 @@ export default function HomeView({
                <Sparkles className="h-5 w-5 text-[#5A7C56] fill-stone-100" />
                ¿Cómo va mi día hoy, {activeUserName}?
              </h2>
-             <p className="text-xs text-stone-500 font-semibold mt-0.5">
+             <div className="flex items-center gap-1.5 mt-1 text-xs text-[#5A7C56] font-bold">
+               <Calendar className="h-3.5 w-3.5" />
+               <span>{formattedDate}</span>
+             </div>
+             <p className="text-[11px] text-stone-500 font-semibold mt-1">
                Control integrado de nutrición en tiempo real para {activeProfile ? `${activeProfile.first_name} ${activeProfile.last_name}` : "Ricardo Mari"}
              </p>
            </div>

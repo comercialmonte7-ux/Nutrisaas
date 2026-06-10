@@ -44,31 +44,48 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-const BUCKET_URL = 'https://kvdb.io/nutrisaas_prod_db_bucket_7e465f5dcc901d8d0baac1bf94300bc212685cc6';
-
+const appKey = 'i7hzycs6';
 let simulatedScannedHistory: any = {};
 
 async function syncFromCloud() {
   const globalFetch = (globalThis as any).fetch;
   if (!globalFetch) return;
   try {
-    const usersRes = await globalFetch(`${BUCKET_URL}/profiles`);
+    const usersRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/profiles`);
     if (usersRes.ok) {
-      simulatedUsers = await usersRes.json();
+      const val = await usersRes.json();
+      if (val && typeof val === 'string' && val.trim() !== '') {
+        const decoded = Buffer.from(val, 'base64url').toString('utf8');
+        if (decoded.trim() !== '') {
+          simulatedUsers = JSON.parse(decoded);
+        }
+      }
     }
   } catch (e) {}
 
   try {
-    const logsRes = await globalFetch(`${BUCKET_URL}/logs`);
+    const logsRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/logs`);
     if (logsRes.ok) {
-      simulatedDailyLogs = await logsRes.json();
+      const val = await logsRes.json();
+      if (val && typeof val === 'string' && val.trim() !== '') {
+        const decoded = Buffer.from(val, 'base64url').toString('utf8');
+        if (decoded.trim() !== '') {
+          simulatedDailyLogs = JSON.parse(decoded);
+        }
+      }
     }
   } catch (e) {}
 
   try {
-    const histRes = await globalFetch(`${BUCKET_URL}/scanned_history`);
+    const histRes = await globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/${appKey}/scanned_history`);
     if (histRes.ok) {
-      simulatedScannedHistory = await histRes.json();
+      const val = await histRes.json();
+      if (val && typeof val === 'string' && val.trim() !== '') {
+        const decoded = Buffer.from(val, 'base64url').toString('utf8');
+        if (decoded.trim() !== '') {
+          simulatedScannedHistory = JSON.parse(decoded);
+        }
+      }
     }
   } catch (e) {}
 }
@@ -105,10 +122,11 @@ function writeLocalDbFile(filename: string, data: any) {
   const key = filename.replace('.json', '');
   const globalFetch = (globalThis as any).fetch;
   if (globalFetch) {
-    globalFetch(`${BUCKET_URL}/${key}`, {
+    const payloadStr = JSON.stringify(data);
+    const base64urlVal = Buffer.from(payloadStr).toString('base64url');
+    globalFetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/${appKey}/${key}/${base64urlVal}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      headers: { 'Content-Length': '0' }
     }).catch((e: any) => console.log(`[Cloud DB] Warning: Failed to sync ${key} to cloud:`, e));
   }
 }
@@ -155,65 +173,7 @@ const defaultUsers = {
   }
 };
 
-const defaultDailyLogs: DailyLog[] = [
-  {
-    id: "log-1",
-    user_id: "de99bbfb-3712-40de-8e3b-9304005fc080",
-    log_date: "2026-06-07",
-    food_id: 1, // Palta Hass
-    custom_food_name: "Palta Hass Chilena",
-    calories: 160,
-    protein_g: 2.0,
-    carbs_g: 9.0,
-    fat_g: 15.0,
-    serving_count: 1.2, // 120g
-    meal_type: "breakfast",
-    created_at: "2026-06-07T08:30:00Z"
-  },
-  {
-    id: "log-2",
-    user_id: "de99bbfb-3712-40de-8e3b-9304005fc080",
-    log_date: "2026-06-07",
-    food_id: 2, // Marraqueta
-    custom_food_name: "Marraqueta Chilena (Pan Batido)",
-    calories: 216,
-    protein_g: 6.8,
-    carbs_g: 44.8,
-    fat_g: 0.8,
-    serving_count: 0.8, // 80g
-    meal_type: "breakfast",
-    created_at: "2026-06-07T08:32:00Z"
-  },
-  {
-    id: "log-3",
-    user_id: "de99bbfb-3712-40de-8e3b-9304005fc080",
-    log_date: "2026-06-07",
-    food_id: 3, // Lomo liso
-    custom_food_name: "Lomo Liso Vacuno (Cocido)",
-    calories: 292,
-    protein_g: 42.0,
-    carbs_g: 0.0,
-    fat_g: 13.5,
-    serving_count: 1.5, // 150g
-    meal_type: "lunch",
-    created_at: "2026-06-07T13:15:00Z"
-  },
-  // An attacker's log to test secure database multi-tenant isolation
-  {
-    id: "log-attacker-1",
-    user_id: "44444444-4444-4444-4444-444444444444",
-    log_date: "2026-06-07",
-    food_id: 5,
-    custom_food_name: "Secret Cheat Burger Excluded from RLS",
-    calories: 950,
-    protein_g: 44.0,
-    carbs_g: 78.0,
-    fat_g: 48.0,
-    serving_count: 1.0,
-    meal_type: "dinner",
-    created_at: "2026-06-07T21:00:00Z"
-  }
-];
+const defaultDailyLogs: DailyLog[] = [];
 
 let simulatedUsers = readLocalDbFile('profiles.json', defaultUsers);
 let simulatedDailyLogs: DailyLog[] = readLocalDbFile('logs.json', defaultDailyLogs);
@@ -735,23 +695,7 @@ app.post('/api/auth/login', (req, res) => {
   (simulatedUsers as any)[newUserId] = newProfile;
   writeLocalDbFile('profiles.json', simulatedUsers);
 
-  // Add dummy initial logs for this new user so their dashboard is not completely empty
-  const todayStr = new Date().toISOString().split('T')[0];
-  simulatedDailyLogs.push({
-    id: `log-seed-1-${Date.now()}`,
-    user_id: newUserId,
-    log_date: todayStr,
-    food_id: 1, // Palta
-    custom_food_name: "Palta Hass de Bienvenida (100g)",
-    calories: 160,
-    protein_g: 2.0,
-    carbs_g: 9.0,
-    fat_g: 15.0,
-    serving_count: 1.0,
-    meal_type: "breakfast",
-    created_at: new Date().toISOString()
-  });
-  writeLocalDbFile('logs.json', simulatedDailyLogs);
+  // Removed preloaded dummy logs seeding
 
   return res.json({
     userId: newUserId,
