@@ -647,104 +647,81 @@ export default function App() {
     }
   };
 
-  const calculateTDEELocally = async () => {
-    try {
-      if (isStaticMode) {
-        throw new Error('Static mode calculations active');
-      }
+  const calculateTDEELocally = () => {
+    const weight = Number(calcForm.weight_kg) || 0;
+    const height = Number(calcForm.height_cm) || 0;
+    const age = Number(calcForm.age) || 0;
+    const gender = calcForm.gender;
 
-      const res = await fetch('/api/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          weight_kg: calcForm.weight_kg,
-          height_cm: calcForm.height_cm,
-          age: calcForm.age,
-          gender: calcForm.gender,
-          activity_level: calcForm.activity_level,
-          goal: calcForm.goal,
-          macro_method: calcForm.macro_method,
-          specific_protein_ratio: calcForm.specific_protein_ratio,
-          specific_fat_ratio: calcForm.specific_fat_ratio,
-          wearable_config: {
-            enabled: calcForm.wearable_enabled,
-            activeCaloriesToday: calcForm.activeCaloriesToday,
-            deviceName: calcForm.deviceName
-          }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCalculatedTarget(data);
-      } else {
-        throw new Error('Calculate server failed or static');
-      }
-    } catch (err) {
-      // Offline / Static Mifflin-St Jeor local formula calculation
-      const weight = calcForm.weight_kg;
-      const height = calcForm.height_cm;
-      const age = calcForm.age;
-      const gender = calcForm.gender;
-      
-      let bmr = 0;
-      if (gender === 'male') {
-        bmr = 10 * weight + 6.25 * height - 5 * age + 5;
-      } else {
-        bmr = 10 * weight + 6.25 * height - 5 * age - 161;
-      }
-
-      const activityMultipliers: Record<ActivityLevel, number> = {
-        sedentary: 1.2,
-        lightly_active: 1.375,
-        moderately_active: 1.55,
-        very_active: 1.725,
-        extra_active: 1.9
-      };
-
-      const multiplier = activityMultipliers[calcForm.activity_level] || 1.375;
-      let tdee = Math.round(bmr * multiplier);
-
-      if (calcForm.wearable_enabled) {
-        tdee += calcForm.activeCaloriesToday;
-      }
-
-      let targetKcal = tdee;
-      if (calcForm.goal === 'lose_weight') {
-        targetKcal = Math.round(tdee - 500);
-      } else if (calcForm.goal === 'gain_muscle') {
-        targetKcal = Math.round(tdee + 300);
-      }
-      if (targetKcal < 1200) targetKcal = 1200; // safe baseline
-
-      let protG = 135;
-      let carbsG = 140;
-      let fatG = 60;
-
-      if (calcForm.macro_method === 'weight_ratio') {
-        protG = Math.round(weight * calcForm.specific_protein_ratio);
-        fatG = Math.round(weight * calcForm.specific_fat_ratio);
-        const protKcal = protG * 4;
-        const fatKcal = fatG * 9;
-        const remainingKcal = Math.max(0, targetKcal - protKcal - fatKcal);
-        carbsG = Math.round(remainingKcal / 4);
-      } else {
-        // Balanced ratio 30/40/30
-        protG = Math.round((targetKcal * 0.3) / 4);
-        carbsG = Math.round((targetKcal * 0.4) / 4);
-        fatG = Math.round((targetKcal * 0.3) / 9);
-      }
-
-      setCalculatedTarget({
-        bmr: Math.round(bmr),
-        tdee,
-        target_calories: targetKcal,
-        target_protein_g: protG,
-        target_carbs_g: carbsG,
-        target_fat_g: fatG,
-        water_l: Number((weight * 0.035).toFixed(1)),
-        dietary_fiber_g: calcForm.has_constipation_trouble ? 35 : 25
-      });
+    // Guard to prevent calculations on invalid/empty numbers during input typing
+    if (weight <= 0 || height <= 0 || age <= 0) {
+      return;
     }
+
+    let bmr = 0;
+    if (gender === 'male') {
+      bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+    } else {
+      bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+    }
+
+    const activityMultipliers: Record<ActivityLevel, number> = {
+      sedentary: 1.2,
+      lightly_active: 1.375,
+      moderately_active: 1.55,
+      very_active: 1.725,
+      extra_active: 1.9
+    };
+
+    const multiplier = activityMultipliers[calcForm.activity_level] || 1.375;
+    let tdee = Math.round(bmr * multiplier);
+
+    if (calcForm.wearable_enabled) {
+      tdee += Number(calcForm.activeCaloriesToday) || 0;
+    }
+
+    let targetKcal = tdee;
+    if (calcForm.goal === 'lose_weight') {
+      targetKcal = Math.round(tdee * 0.85); // 15% deficit matching server
+      const limit = gender === 'female' ? 1200 : 1500;
+      if (targetKcal < limit) {
+        targetKcal = limit;
+      }
+    } else if (calcForm.goal === 'gain_muscle') {
+      targetKcal = Math.round(tdee * 1.10); // 10% surplus matching server
+    }
+    if (targetKcal < 1200) targetKcal = 1200; // safe baseline floor
+
+    let protG = 135;
+    let carbsG = 140;
+    let fatG = 60;
+
+    if (calcForm.macro_method === 'weight_ratio') {
+      const specific_protein_ratio = Number(calcForm.specific_protein_ratio) || 2.0;
+      const specific_fat_ratio = Number(calcForm.specific_fat_ratio) || 1.0;
+      protG = Math.round(weight * specific_protein_ratio);
+      fatG = Math.round(weight * specific_fat_ratio);
+      const protKcal = protG * 4;
+      const fatKcal = fatG * 9;
+      const remainingKcal = Math.max(0, targetKcal - protKcal - fatKcal);
+      carbsG = Math.round(remainingKcal / 4);
+    } else {
+      // Balanced ratio 30% Protein / 40% Carbs / 30% Fat
+      protG = Math.round((targetKcal * 0.3) / 4);
+      carbsG = Math.round((targetKcal * 0.4) / 4);
+      fatG = Math.round((targetKcal * 0.3) / 9);
+    }
+
+    setCalculatedTarget({
+      bmr: Math.round(bmr),
+      tdee,
+      target_calories: targetKcal,
+      target_protein_g: protG,
+      target_carbs_g: carbsG,
+      target_fat_g: fatG,
+      water_l: Number((weight * 0.035).toFixed(1)),
+      dietary_fiber_g: calcForm.has_constipation_trouble ? 35 : 25
+    });
   };
 
   const handleUpdateSupabaseProfile = async () => {
@@ -799,6 +776,7 @@ export default function App() {
           text: `¡Tu perfil clínico y metas nutricionales han sido actualizados con éxito!`
         });
         fetchUserData();
+        setMobileScreen('home'); // Redirect back to dashboard to see updated budget calories!
       } else {
         throw new Error('ID de usuario ausente');
       }
