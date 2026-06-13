@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Apple, ArrowRight, ShieldCheck, Sparkles, KeyRound } from 'lucide-react';
+import { safeLocalStorageSetItem } from '../storage';
 
 interface LoginViewProps {
   onLoginSuccess: (userId: string) => void;
@@ -28,7 +29,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       setErrorMsg('Por favor ingresa un ID de cliente válido.');
       return;
     }
-    localStorage.setItem('nutrisaas_google_client_id', cleanId);
+    safeLocalStorageSetItem('nutrisaas_google_client_id', cleanId);
     setGoogleClientId(cleanId);
     setErrorMsg(null);
   };
@@ -80,7 +81,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       }
 
       // 1. Save session to localStorage
-      localStorage.setItem('nutrisaas_active_user_id', finalUserId);
+      safeLocalStorageSetItem('nutrisaas_active_user_id', finalUserId);
       localStorage.removeItem('nutrisaas_is_static_mode');
 
       // 2. Seed/update user profile in localStorage (Server-First approach)
@@ -118,7 +119,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
               profileData = aData.profile;
               if (aData.userId && aData.userId !== finalUserId) {
                 finalUserId = aData.userId;
-                localStorage.setItem('nutrisaas_active_user_id', finalUserId);
+                safeLocalStorageSetItem('nutrisaas_active_user_id', finalUserId);
               }
             }
           }
@@ -161,7 +162,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
       // Local-First: if the user already has a profile locally, don't overwrite it with stale server database data (which can get wiped on server resets on Vercel)
       if (!localProfiles[finalUserId]) {
         localProfiles[finalUserId] = profileData;
-        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+        safeLocalStorageSetItem(localProfilesKey, JSON.stringify(localProfiles));
       } else {
         // Local profile exists. Let's sync the local profile to the server!
         const localProf = localProfiles[finalUserId];
@@ -189,7 +190,7 @@ export default function LoginView({ onLoginSuccess, loading, setLoading }: Login
             const existingIds = new Set(localLogs.map((l: any) => l.id));
             const newServerLogs = lData.logs.filter((l: any) => !existingIds.has(l.id));
             localLogs = [...newServerLogs, ...localLogs];
-            localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
+            safeLocalStorageSetItem(localLogsKey, JSON.stringify(localLogs));
           }
         }
       } catch (e) {

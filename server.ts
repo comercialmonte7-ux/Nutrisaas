@@ -966,6 +966,87 @@ app.post('/api/database/scanned_history/update', (req, res) => {
   });
 });
 
+/**
+ * MÓDULO 5: SINCRONIZACIÓN APPLE HEALTH VÍA iOS SHORTCUTS (POST)
+ * 
+ * Endpoint diseñado para recibir datos de salud desde un Atajo de iOS.
+ * No requiere header x-user-id — se autentica por email en el body.
+ * 
+ * URL para Atajos: POST https://nutrisaas-zeta.vercel.app/api/sync-health
+ * Body JSON: { "email": "tu@correo.com", "active_cals": 420, "steps": 8500 }
+ */
+app.post('/api/sync-health', async (req, res) => {
+  await syncFromCloud();
+
+  const { email, active_cals, steps, distance_km, exercise_minutes } = req.body;
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({
+      error: "missing_email",
+      message: "Debes enviar tu correo electrónico en el campo 'email' del body JSON para identificar tu cuenta."
+    });
+  }
+
+  if (active_cals === undefined && steps === undefined && distance_km === undefined && exercise_minutes === undefined) {
+    return res.status(400).json({
+      error: "missing_health_data",
+      message: "Debes enviar al menos un campo de salud: 'active_cals', 'steps', 'distance_km', o 'exercise_minutes'."
+    });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Find user by email
+  const userId = Object.keys(simulatedUsers).find(
+    id => (simulatedUsers as any)[id].email?.toLowerCase().trim() === cleanEmail
+  );
+
+  if (!userId) {
+    return res.status(404).json({
+      error: "user_not_found",
+      message: `No se encontró un usuario registrado con el correo '${cleanEmail}'. Inicia sesión en NutriSaaS al menos una vez desde el navegador antes de usar el atajo.`
+    });
+  }
+
+  // Update user profile with wearable health data
+  const now = new Date().toISOString();
+  const healthUpdate: Record<string, any> = {
+    wearable_last_sync: now,
+    wearable_sync_source: 'ios_shortcut'
+  };
+
+  if (active_cals !== undefined) {
+    healthUpdate.wearable_active_cals = Math.max(0, Math.min(5000, Number(active_cals) || 0));
+  }
+  if (steps !== undefined) {
+    healthUpdate.wearable_steps = Math.max(0, Number(steps) || 0);
+  }
+  if (distance_km !== undefined) {
+    healthUpdate.wearable_distance_km = Math.max(0, Number(distance_km) || 0);
+  }
+  if (exercise_minutes !== undefined) {
+    healthUpdate.wearable_exercise_minutes = Math.max(0, Number(exercise_minutes) || 0);
+  }
+
+  (simulatedUsers as any)[userId] = {
+    ...(simulatedUsers as any)[userId],
+    ...healthUpdate
+  };
+  writeLocalDbFile('profiles.json', simulatedUsers);
+
+  const profile = (simulatedUsers as any)[userId];
+
+  res.json({
+    success: true,
+    message: `✅ ¡Datos de Apple Health sincronizados para ${profile.first_name}!`,
+    synced_data: healthUpdate,
+    user: {
+      name: `${profile.first_name} ${profile.last_name}`,
+      email: profile.email
+    }
+  });
+});
+
 
 // --- END OF MAIN API ROUTES ---
 

@@ -31,6 +31,7 @@ import ScannerView from './components/ScannerView';
 import RecipesView from './components/RecipesView';
 import DbExplorerView from './components/DbExplorerView';
 import LoginView from './components/LoginView';
+import { safeLocalStorageSetItem } from './storage';
 
 export default function App() {
   // System Sessions / Authenticated User Context Simulator
@@ -59,8 +60,10 @@ export default function App() {
   const handleModifyWater = (amount: number) => {
     setWaterIntake(prev => {
       const next = Math.max(0, Math.min(12, prev + amount));
-      const key = activeUserId ? `nutrisaas_water_intake_${activeUserId}` : 'nutrisaas_water_intake';
-      localStorage.setItem(key, String(next));
+      setTimeout(() => {
+        const key = activeUserId ? `nutrisaas_water_intake_${activeUserId}` : 'nutrisaas_water_intake';
+        safeLocalStorageSetItem(key, String(next));
+      }, 0);
       return next;
     });
   };
@@ -140,21 +143,22 @@ export default function App() {
 
     setScannedHistory(prev => {
       const updated = [historyItem, ...prev].slice(0, 15); // limit to 15 items
-      const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
-      localStorage.setItem(key, JSON.stringify(updated));
+      setTimeout(() => {
+        const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
+        safeLocalStorageSetItem(key, JSON.stringify(updated));
 
-      // Sync updated history to server database
-      if (activeUserId) {
-        fetch('/api/database/scanned_history/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': activeUserId
-          },
-          body: JSON.stringify({ history: updated })
-        }).catch(err => console.log('Error de sincronización de historial:', err));
-      }
-
+        // Sync updated history to server database
+        if (activeUserId) {
+          fetch('/api/database/scanned_history/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': activeUserId
+            },
+            body: JSON.stringify({ history: updated })
+          }).catch(err => console.log('Error de sincronización de historial:', err));
+        }
+      }, 0);
       return updated;
     });
   };
@@ -162,21 +166,22 @@ export default function App() {
   const handleDeleteScannedItem = (id: string) => {
     setScannedHistory(prev => {
       const updated = prev.filter(item => item.id !== id);
-      const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
-      localStorage.setItem(key, JSON.stringify(updated));
+      setTimeout(() => {
+        const key = activeUserId ? `nutrisaas_scanned_history_${activeUserId}` : 'nutrisaas_scanned_history';
+        safeLocalStorageSetItem(key, JSON.stringify(updated));
 
-      // Sync updated history to server database
-      if (activeUserId) {
-        fetch('/api/database/scanned_history/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': activeUserId
-          },
-          body: JSON.stringify({ history: updated })
-        }).catch(err => console.log('Error de sincronización de historial:', err));
-      }
-
+        // Sync updated history to server database
+        if (activeUserId) {
+          fetch('/api/database/scanned_history/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': activeUserId
+            },
+            body: JSON.stringify({ history: updated })
+          }).catch(err => console.log('Error de sincronización de historial:', err));
+        }
+      }, 0);
       return updated;
     });
   };
@@ -204,7 +209,7 @@ export default function App() {
         ...payload,
         created_at: new Date().toISOString()
       };
-      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      safeLocalStorageSetItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       
       // Seed to server mock
       try {
@@ -274,7 +279,7 @@ export default function App() {
     const activeCalsParam = params.get('active_cals');
     if (activeCalsParam && activeUserId) {
       const kcal = Math.max(0, Math.min(3000, Number(activeCalsParam) || 0));
-      localStorage.setItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
+      safeLocalStorageSetItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
       setCalcForm(prev => ({
         ...prev,
         activeCaloriesToday: kcal,
@@ -381,7 +386,7 @@ export default function App() {
           const localProfilesKey = 'nutrisaas_local_profiles';
           const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
           localProfiles[targetUserId] = data.profile;
-          localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+          safeLocalStorageSetItem(localProfilesKey, JSON.stringify(localProfiles));
         }
 
         // 2. Logs (Merge, avoiding duplicates)
@@ -394,13 +399,13 @@ export default function App() {
           const filteredLogs = localLogs.filter((l: any) => l.user_id !== targetUserId || !existingIds.has(l.id));
           const mergedLogs = [...data.logs, ...filteredLogs];
           
-          localStorage.setItem(localLogsKey, JSON.stringify(mergedLogs));
+          safeLocalStorageSetItem(localLogsKey, JSON.stringify(mergedLogs));
         }
 
         // 3. Scanned History
         if (Array.isArray(data.scannedHistory)) {
           const scannedHistoryKey = `nutrisaas_scanned_history_${targetUserId}`;
-          localStorage.setItem(scannedHistoryKey, JSON.stringify(data.scannedHistory));
+          safeLocalStorageSetItem(scannedHistoryKey, JSON.stringify(data.scannedHistory));
           setScannedHistory(data.scannedHistory);
           if (targetUserId) {
             fetch('/api/database/scanned_history/update', {
@@ -416,16 +421,16 @@ export default function App() {
 
         // 4. Water and Fiber
         if (data.waterIntake !== undefined) {
-          localStorage.setItem(`nutrisaas_water_intake_${targetUserId}`, String(data.waterIntake));
+          safeLocalStorageSetItem(`nutrisaas_water_intake_${targetUserId}`, String(data.waterIntake));
           setWaterIntake(Number(data.waterIntake));
         }
         if (data.fiberIntake !== undefined) {
-          localStorage.setItem(`nutrisaas_fiber_intake_${targetUserId}`, String(data.fiberIntake));
+          safeLocalStorageSetItem(`nutrisaas_fiber_intake_${targetUserId}`, String(data.fiberIntake));
         }
 
         // 5. Supplements
         if (data.suppsState) {
-          localStorage.setItem(`nutrisaas_supps_state_${targetUserId}`, JSON.stringify(data.suppsState));
+          safeLocalStorageSetItem(`nutrisaas_supps_state_${targetUserId}`, JSON.stringify(data.suppsState));
         }
 
         setDbStatusMsg({
@@ -457,22 +462,24 @@ export default function App() {
       const localProfilesKey = 'nutrisaas_local_profiles';
       const localProfiles = JSON.parse(localStorage.getItem(localProfilesKey) || '{}');
       
-      // If profile doesn't exist in local storage for the active user, try fetching it from the backend API first (seeding)
-      if (!localProfiles[activeUserId]) {
-        try {
-          const profRes = await fetch('/api/database/profile', {
-            headers: { 'x-user-id': activeUserId || '' }
-          });
-          if (profRes.ok) {
-            const pData = profRes.headers.get('content-type')?.includes('application/json') ? await profRes.json() : null;
-            if (pData && pData.profile) {
-              localProfiles[activeUserId] = pData.profile;
-              localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
-            }
+      // Always try to fetch the latest profile from the server and merge with local data
+      try {
+        const profRes = await fetch('/api/database/profile', {
+          headers: { 'x-user-id': activeUserId || '' }
+        });
+        if (profRes.ok) {
+          const pData = profRes.headers.get('content-type')?.includes('application/json') ? await profRes.json() : null;
+          if (pData && pData.profile) {
+            // Merge: server profile wins for fields it has, but preserve any local-only fields
+            localProfiles[activeUserId] = {
+              ...localProfiles[activeUserId],
+              ...pData.profile
+            };
+            safeLocalStorageSetItem(localProfilesKey, JSON.stringify(localProfiles));
           }
-        } catch (e) {
-          console.log('Error de red al intentar sincronizar el perfil con el servidor:', e);
         }
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el perfil con el servidor (usando datos locales):', e);
       }
 
       // If still not present (e.g. offline and new email), seed a default one
@@ -502,7 +509,7 @@ export default function App() {
           has_other_condition: false,
           other_condition_notes: ""
         };
-        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+        safeLocalStorageSetItem(localProfilesKey, JSON.stringify(localProfiles));
       }
 
       // Load all users from localStorage to populate session switcher
@@ -519,7 +526,10 @@ export default function App() {
         const birthYear = birthYearStr ? parseInt(birthYearStr, 10) : 1995;
         const ageCalculated = new Date().getFullYear() - birthYear;
         const savedWearableCals = localStorage.getItem(`nutrisaas_wearable_active_cals_${activeUserId}`);
-        const activeCalVal = savedWearableCals !== null ? Number(savedWearableCals) : 0;
+        // Prefer server-synced wearable data from iOS Shortcut over localStorage
+        const serverSyncedCals = activeProf.wearable_active_cals;
+        const activeCalVal = serverSyncedCals !== undefined ? Number(serverSyncedCals) : (savedWearableCals !== null ? Number(savedWearableCals) : 0);
+        const wearableEnabled = serverSyncedCals !== undefined || savedWearableCals !== null;
 
         setCalcForm(prev => ({
           ...prev,
@@ -530,6 +540,7 @@ export default function App() {
           activity_level: activeProf.activity_level as ActivityLevel,
           goal: activeProf.goal as Goal,
           activeCaloriesToday: activeCalVal,
+          wearable_enabled: wearableEnabled || prev.wearable_enabled,
           has_constipation_trouble: activeProf.has_constipation_trouble !== undefined ? !!activeProf.has_constipation_trouble : false,
           has_long_trips: activeProf.has_long_trips !== undefined ? !!activeProf.has_long_trips : false,
           has_other_condition: activeProf.has_other_condition !== undefined ? !!activeProf.has_other_condition : false,
@@ -537,30 +548,32 @@ export default function App() {
         }));
       }
 
-      // 3. Load daily logs from localStorage
+      // 3. Load daily logs from localStorage, then ALWAYS sync with server to catch cross-device updates
       const localLogsKey = 'nutrisaas_local_logs';
       let localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       let userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
 
-      // If activeUserId has no logs in local storage, try fetching from the backend once (seeding)
-      if (userLogs.length === 0) {
-        try {
-          const logsRes = await fetch('/api/database/daily_logs', {
-            headers: { 'x-user-id': activeUserId || '' }
-          });
-          if (logsRes.ok) {
-            const lData = await logsRes.json();
-            if (lData.logs && lData.logs.length > 0) {
-              const existingIds = new Set(localLogs.map((l: any) => l.id));
-              const newServerLogs = lData.logs.filter((l: any) => !existingIds.has(l.id));
-              localLogs = [...newServerLogs, ...localLogs];
-              localStorage.setItem(localLogsKey, JSON.stringify(localLogs));
-              userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
-            }
+      // Always fetch from server and merge — this fixes cross-device sync (iPhone ↔ Web)
+      try {
+        const logsRes = await fetch('/api/database/daily_logs', {
+          headers: { 'x-user-id': activeUserId || '' }
+        });
+        if (logsRes.ok) {
+          const lData = await logsRes.json();
+          if (lData.logs && lData.logs.length > 0) {
+            // Merge: deduplicate by id, keeping the union of local + server logs
+            const localIdMap = new Map(localLogs.map((l: any) => [l.id, l]));
+            lData.logs.forEach((serverLog: any) => {
+              if (!localIdMap.has(serverLog.id)) {
+                localLogs.push(serverLog);
+              }
+            });
+            safeLocalStorageSetItem(localLogsKey, JSON.stringify(localLogs));
+            userLogs = localLogs.filter((l: any) => l.user_id === activeUserId);
           }
-        } catch (e) {
-          console.log('Error de red al intentar sincronizar las bitácoras con el servidor:', e);
         }
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar las bitácoras con el servidor (usando datos locales):', e);
       }
 
       // If still no logs, do not seed default ones (start clean)
@@ -570,29 +583,35 @@ export default function App() {
 
       setDailyLogs(userLogs);
 
-      // 4. Load scanned history from localStorage, sync with server if empty in localStorage
+      // 4. Load scanned history from localStorage, then ALWAYS sync with server for cross-device updates
       const scannedHistoryKey = `nutrisaas_scanned_history_${activeUserId}`;
-      let localHistory = [];
+      let localHistory: any[] = [];
       try {
         localHistory = JSON.parse(localStorage.getItem(scannedHistoryKey) || '[]');
       } catch (_) {}
 
-      if (localHistory.length === 0) {
-        try {
-          const scanRes = await fetch('/api/database/scanned_history', {
-            headers: { 'x-user-id': activeUserId || '' }
-          });
-          if (scanRes.ok) {
-            const sData = await scanRes.json();
-            if (sData.history && sData.history.length > 0) {
-              localStorage.setItem(scannedHistoryKey, JSON.stringify(sData.history));
-              setScannedHistory(sData.history);
-            }
+      // Always fetch from server and merge scanned history
+      try {
+        const scanRes = await fetch('/api/database/scanned_history', {
+          headers: { 'x-user-id': activeUserId || '' }
+        });
+        if (scanRes.ok) {
+          const sData = await scanRes.json();
+          if (sData.history && sData.history.length > 0) {
+            // Merge: deduplicate by id, keeping the union of local + server history
+            const localIdSet = new Set(localHistory.map((h: any) => h.id));
+            sData.history.forEach((serverItem: any) => {
+              if (!localIdSet.has(serverItem.id)) {
+                localHistory.push(serverItem);
+              }
+            });
+            safeLocalStorageSetItem(scannedHistoryKey, JSON.stringify(localHistory));
           }
-        } catch (e) {
-          console.log('Error de red al intentar sincronizar el historial de escaneo con el servidor:', e);
         }
+      } catch (e) {
+        console.log('Error de red al intentar sincronizar el historial de escaneo con el servidor (usando datos locales):', e);
       }
+      setScannedHistory(localHistory);
 
     } catch (err) {
       console.error('Error in fetchUserData local-first:', err);
@@ -711,7 +730,7 @@ export default function App() {
           ...localProfiles[activeUserId],
           ...payload
         };
-        localStorage.setItem(localProfilesKey, JSON.stringify(localProfiles));
+        safeLocalStorageSetItem(localProfilesKey, JSON.stringify(localProfiles));
 
         // 2. Update backend database
         if (!isStaticMode) {
@@ -1218,7 +1237,7 @@ export default function App() {
         ...payload,
         created_at: new Date().toISOString()
       };
-      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      safeLocalStorageSetItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
 
       // Seed to server mock
       try {
@@ -1317,7 +1336,7 @@ export default function App() {
         ...payload,
         created_at: new Date().toISOString()
       };
-      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      safeLocalStorageSetItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       setDbStatusMsg({
         type: 'success',
         text: `¡Alimento registrado exitosamente en tu bitácora de hoy!`
@@ -1342,7 +1361,7 @@ export default function App() {
       const localLogsKey = 'nutrisaas_local_logs';
       const localLogs = JSON.parse(localStorage.getItem(localLogsKey) || '[]');
       const filtered = localLogs.filter((l: any) => l.id !== logId);
-      localStorage.setItem(localLogsKey, JSON.stringify(filtered));
+      safeLocalStorageSetItem(localLogsKey, JSON.stringify(filtered));
 
       // Sync deletion to server database
       if (activeUserId && !isStaticMode) {
@@ -1404,7 +1423,7 @@ export default function App() {
         ...payload,
         created_at: new Date().toISOString()
       };
-      localStorage.setItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
+      safeLocalStorageSetItem(localLogsKey, JSON.stringify([newLog, ...localLogs]));
       
       // Seed to server mock
       try {
@@ -1569,7 +1588,7 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setIsStaticMode(false);
-                      localStorage.setItem('nutrisaas_is_static_mode', 'false');
+                      safeLocalStorageSetItem('nutrisaas_is_static_mode', 'false');
                       setScannerError(null);
                     }}
                     className="text-[10px] bg-amber-50 text-amber-700 hover:bg-amber-100 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-250 cursor-pointer transition flex items-center gap-1 shadow-3xs"
@@ -1581,7 +1600,7 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setIsStaticMode(true);
-                      localStorage.setItem('nutrisaas_is_static_mode', 'true');
+                      safeLocalStorageSetItem('nutrisaas_is_static_mode', 'true');
                       setScannerError(null);
                     }}
                     className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-250 cursor-pointer transition flex items-center gap-1 shadow-3xs"
@@ -1835,7 +1854,8 @@ export default function App() {
                       key={glass}
                       onClick={() => {
                         setWaterIntake(glass);
-                        localStorage.setItem('nutrisaas_water_intake', String(glass));
+                        const key = activeUserId ? `nutrisaas_water_intake_${activeUserId}` : 'nutrisaas_water_intake';
+                        safeLocalStorageSetItem(key, String(glass));
                       }}
                       className={`p-1 rounded-full transition-all cursor-pointer ${active ? 'bg-sky-500 text-white scale-110 shadow-3xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-400'}`}
                       title={`Registrar ${glass} vasos`}

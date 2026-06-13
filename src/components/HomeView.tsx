@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { DailyLog } from '../types';
 import { CHILEAN_LA_FOODS, searchFoods } from '../foodDatabase';
+import { safeLocalStorageSetItem } from '../storage';
 
 export interface HomeViewProps {
   key?: any;
@@ -147,16 +148,12 @@ export default function HomeView({
   const handleSaveWatchCalories = (e: React.FormEvent) => {
     e.preventDefault();
     const kcal = Math.max(0, Math.min(3000, Number(watchCalInput) || 0));
-    setCalcForm((prev: any) => {
-      const next = {
-        ...prev,
-        wearable_enabled: true,
-        activeCaloriesToday: kcal
-      };
-      // Save user-scoped wearable settings to localStorage
-      localStorage.setItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
-      return next;
-    });
+    setCalcForm((prev: any) => ({
+      ...prev,
+      wearable_enabled: true,
+      activeCaloriesToday: kcal
+    }));
+    safeLocalStorageSetItem(`nutrisaas_wearable_active_cals_${activeUserId}`, String(kcal));
     setShowWatchModal(false);
   };
   
@@ -169,7 +166,9 @@ export default function HomeView({
   const handleModifyFiber = (amount: number) => {
     setFiberIntake(prev => {
       const next = Math.max(0, Math.min(60, prev + amount));
-      localStorage.setItem('nutrisaas_fiber_intake', String(next));
+      setTimeout(() => {
+        safeLocalStorageSetItem('nutrisaas_fiber_intake', String(next));
+      }, 0);
       return next;
     });
   };
@@ -225,7 +224,9 @@ export default function HomeView({
   const toggleUserSupp = (key: string) => {
     setUserSupplements(prev => {
       const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(`nutrisaas_supps_state_${activeUserId}`, JSON.stringify(next));
+      setTimeout(() => {
+        safeLocalStorageSetItem(`nutrisaas_supps_state_${activeUserId}`, JSON.stringify(next));
+      }, 0);
       return next;
     });
   };
@@ -1096,7 +1097,7 @@ export default function HomeView({
                 <button 
                   onClick={() => {
                     setFiberIntake(25);
-                    localStorage.setItem('nutrisaas_fiber_intake', '25');
+                    safeLocalStorageSetItem('nutrisaas_fiber_intake', '25');
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black px-2 py-1 rounded-lg transition cursor-pointer"
                 >
@@ -1184,7 +1185,7 @@ export default function HomeView({
                       onChange={(e) => {
                         const v = Number(e.target.value);
                         setBusDuration(v);
-                        localStorage.setItem('nutrisaas_bus_duration_hours', String(v));
+                        safeLocalStorageSetItem('nutrisaas_bus_duration_hours', String(v));
                       }}
                       className="bg-white border border-stone-200 rounded-lg text-xs font-black text-indigo-955 px-2 py-0.5 focus:outline-hidden"
                     >
